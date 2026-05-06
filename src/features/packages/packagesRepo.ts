@@ -111,13 +111,21 @@ export async function getPackage(id: string): Promise<Package | null> {
   return loadStore().find((p) => p.id === id) ?? null;
 }
 
+/** Wrap Supabase PostgrestError (plain object) into a proper Error so that
+ *  `catch` blocks can reliably use `err instanceof Error` and `.message`. */
+function sbErr(error: { message?: string; details?: string; hint?: string; code?: string }): Error {
+  const parts = [error.message, error.details, error.hint].filter(Boolean);
+  const msg = parts.join(" — ") || "Supabase error (no message)";
+  return Object.assign(new Error(msg), { supabaseCode: error.code });
+}
+
 export async function createPackage(draft: PackageDraft, preId?: string): Promise<Package> {
   const now = new Date().toISOString();
   const pkg: Package = { ...draft, id: preId ?? `p-${Date.now()}`, createdAt: now, updatedAt: now };
   if (isSupabaseConfigured()) {
     const agencyId = requireAgencyId();
     const { error } = await supabase!.from("packages").insert(toRow(pkg, agencyId));
-    if (error) throw error;
+    if (error) throw sbErr(error);
   }
   saveStore([pkg, ...loadStore()]);
   return pkg;
@@ -131,7 +139,7 @@ export async function updatePackage(id: string, patch: Partial<PackageDraft>): P
   items[idx] = updated;
   if (isSupabaseConfigured()) {
     const { error } = await supabase!.from("packages").update(toRow(updated)).eq("id", id);
-    if (error) throw error;
+    if (error) throw sbErr(error);
   }
   saveStore(items);
   return updated;
@@ -150,7 +158,7 @@ export async function deletePackage(id: string): Promise<void> {
       .select("id");
     if (error) {
       console.error(`[packages] DELETE id=${id} gagal:`, error);
-      throw error;
+      throw sbErr(error);
     }
     if (!data || data.length === 0) {
       const msg =

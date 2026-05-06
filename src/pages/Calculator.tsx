@@ -1047,7 +1047,14 @@ export default function Calculator() {
       navigate("/packages");
     } catch (err) {
       console.error("create package failed", err);
-      const msg = err instanceof Error ? err.message : "Coba lagi.";
+      // Supabase throws PostgrestError (plain object, NOT instanceof Error),
+      // so we need to extract .message manually for both cases.
+      const msg =
+        err instanceof Error
+          ? err.message
+          : err && typeof err === "object" && "message" in err
+            ? String((err as { message: unknown }).message)
+            : JSON.stringify(err) || "Coba lagi.";
       toast.error("Gagal membuat Paket Trip", { description: msg });
     } finally {
       setCreatingTrip(false);
