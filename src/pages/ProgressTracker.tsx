@@ -1,4 +1,4 @@
-import { useEffect, useState, useMemo } from "react";
+import { useEffect, useRef, useState, useMemo } from "react";
 import { useNavigate } from "react-router-dom";
 import { useTripsStore, useJamaahStore, useDocsStore } from "@/store/tripsStore";
 import type { Trip, Jamaah } from "@/store/tripsStore";
@@ -267,20 +267,31 @@ export default function ProgressTracker() {
   const { jamaah, fetchJamaah } = useJamaahStore();
   const { docs, fetchDocs } = useDocsStore();
   const [search, setSearch] = useState("");
-  const [loadedTrips, setLoadedTrips] = useState<Set<string>>(new Set());
+  // useRef bukan useState → tracking tanpa memicu re-render tambahan.
+  const loadedTripsRef = useRef<Set<string>>(new Set());
+  const fetchedDocsRef = useRef<Set<string>>(new Set());
 
+  // Fetch jamaah hanya untuk trip yang BELUM pernah di-load.
   useEffect(() => {
     trips.forEach((t) => {
-      if (!loadedTrips.has(t.id)) {
+      if (!loadedTripsRef.current.has(t.id)) {
+        loadedTripsRef.current.add(t.id);
         fetchJamaah(t.id);
-        setLoadedTrips((prev) => new Set([...prev, t.id]));
       }
     });
   }, [trips]);
 
+  // Fetch docs hanya untuk jamaah yang BELUM pernah di-fetch.
+  // Dependency: array jamaah (bukan .length) supaya ikut trigger saat jamaah
+  // dari trip lain ditambahkan ke store (reference berubah, length bisa sama).
   useEffect(() => {
-    jamaah.forEach((j) => { fetchDocs(j.id); });
-  }, [jamaah.length]);
+    jamaah.forEach((j) => {
+      if (!fetchedDocsRef.current.has(j.id)) {
+        fetchedDocsRef.current.add(j.id);
+        fetchDocs(j.id);
+      }
+    });
+  }, [jamaah]);
 
   // Build docMap: jamaahId → category[]
   const docMap = useMemo(() => {

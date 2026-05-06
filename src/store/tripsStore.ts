@@ -74,7 +74,11 @@ export const useJamaahStore = create<JamaahState>((set) => ({
   fetchJamaah: async (tripId) => {
     set({ loadingJamaah: true });
     const data = await listJamaah(tripId);
-    set({ jamaah: data, loadingJamaah: false });
+    set((s) => ({
+      // Pertahankan jamaah dari trip LAIN, hanya ganti jamaah milik tripId ini.
+      jamaah: [...s.jamaah.filter((j) => j.tripId !== tripId), ...data],
+      loadingJamaah: false,
+    }));
   },
 
   addJamaah: async (draft) => {
@@ -121,7 +125,11 @@ export const useDocsStore = create<DocsState>((set) => ({
   fetchDocs: async (jamaahId) => {
     set({ loadingDocs: true });
     const data = await listDocs(jamaahId);
-    set({ docs: data, loadingDocs: false });
+    set((s) => ({
+      // Pertahankan docs milik jamaah LAIN, hanya ganti docs milik jamaahId ini.
+      docs: [...s.docs.filter((d) => d.jamaahId !== jamaahId), ...data],
+      loadingDocs: false,
+    }));
   },
 
   addDocument: async (draft) => {
