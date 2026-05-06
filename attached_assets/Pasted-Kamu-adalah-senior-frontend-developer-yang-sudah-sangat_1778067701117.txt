@@ -1,0 +1,54 @@
+Kamu adalah senior frontend developer yang sudah sangat paham codebase igh-tour (Vite + React + TypeScript + Zustand + shadcn/ui + pdf-lib).
+
+Saat ini di halaman PackageDetail.tsx ada fitur kalkulator hotel yang sangat detail (per baris hotel + rate Q/T/D + jumlah kamar). Itu bagus untuk internal costing.
+
+Sekarang user butuh fitur baru untuk **membuat Penawaran Harga Grup (Quotation)** yang lebih tinggi level, mirip tabel yang biasa dipakai sales untuk kirim ke klien.
+
+Contoh output yang diinginkan:
+- Tabel itinerary
+- Tabel Include / Exclude
+- Tabel Hotel + Kelas
+- Tabel Harga berdasarkan jumlah peserta (15-19 orang, 20-24, 25-29, 30-34, 35-39, 40-49) dengan harga semakin murah per orang saat jumlah peserta naik.
+
+Tugas kamu:
+
+1. **Tambahkan Tab baru** di PackageDetail.tsx bernama **"Penawaran Grup"** (di samping tab yang sudah ada seperti Hotel, dll).
+
+2. Di tab "Penawaran Grup", buat form sederhana dengan 2 bagian:
+
+   **Bagian A - Informasi Package**
+   - Nama Paket
+   - Durasi
+   - Itinerary singkat (bisa pakai textarea atau list sederhana dulu)
+   - Daftar Hotel yang digunakan (bisa pilih dari data hotel yang sudah diinput di tab Hotel, atau input manual)
+   - Include (list)
+   - Exclude (list)
+
+   **Bagian B - Struktur Harga Grup**
+   - Input "Base Price per Pax" (bisa diisi manual atau ada tombol "Ambil dari Kalkulasi" yang ambil nilai per pax dari tab Hotel)
+   - Tabel Tier Harga dengan kolom:
+     - Jumlah Peserta (range): 15-19 | 20-24 | 25-29 | 30-34 | 35-39 | 40-49
+     - Harga per Pax (bisa diisi manual)
+     - Atau ada toggle "Hitung Otomatis" yang menurunkan harga secara proporsional berdasarkan base price + markup
+
+3. **Preview Section**
+   - Di bawah form, tampilkan preview tabel yang sudah rapi dan mirip contoh (dengan border, header berwarna, dll) menggunakan komponen Table shadcn.
+   - Preview ini harus bisa langsung dilihat hasilnya saat user mengubah data.
+
+4. **Simpan & Export**
+   - Tambahkan tombol **"Simpan Penawaran"** yang menyimpan data ini ke dalam `calc` state (buat field baru di ProfessionalCalcState jika perlu, misalnya `groupQuotation`).
+   - Tambahkan tombol **"Export PDF"** yang generate PDF cantik dari preview tabel tersebut (pakai pdf-lib yang sudah ada di project).
+
+5. **UX yang diinginkan**
+   - Buat UI-nya bersih dan profesional (pakai card, section header, dll).
+   - Beri opsi "Gunakan Tier Standar" yang langsung mengisi range 15-19 sampai 40-49.
+   - Saat user klik "Ambil dari Kalkulasi", otomatis isi Base Price dari hasil per pax di tab Hotel.
+
+Mulai dari yang paling penting dulu:
+- Tab baru "Penawaran Grup"
+- Form input + preview tabel
+- Simpan ke state
+
+Setelah selesai, jelaskan struktur data baru yang kamu tambahkan di state, dan file apa saja yang kamu ubah.
+
+Kerjakan dengan clean code dan gunakan komponen shadcn yang sudah ada.

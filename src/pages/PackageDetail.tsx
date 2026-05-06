@@ -23,6 +23,7 @@ import {
   type GeneralCostRow, type CalcCurrency, type CalcMode, type CostUnit,
 } from "@/features/calculator/pricing";
 import { GroupMatrixSection, DEFAULT_GROUP_SETTINGS, type GroupSettings } from "@/features/calculator/GroupMatrixSection";
+import GroupQuotationTab, { type GroupQuotation, DEFAULT_GROUP_QUOTATION } from "@/features/calculator/GroupQuotationTab";
 import { HotelRatesCell } from "@/features/calculator/HotelRatesCell";
 import { usePackages } from "@/features/packages/usePackages";
 import { scanPassport, countPassportDataFields, failedChecksumLabels } from "@/lib/ocrPassport";
@@ -67,6 +68,7 @@ interface ProfessionalCalcState {
   marginPercent: number;
   discount: number;
   groupSettings: GroupSettings;
+  groupQuotation?: GroupQuotation;
 }
 
 // ── Storage ───────────────────────────────────────────────────────────────────
@@ -107,6 +109,9 @@ function loadPackageCalc(packageId: string, fallback: ProfessionalCalcState): Pr
     staffs: (stored.staffs ?? fallback.staffs).map((s: StaffRow) => ({ numStaff: 1, ...s })),
     generalCosts: stored.generalCosts ?? fallback.generalCosts,
     groupSettings: { ...fallback.groupSettings, ...(stored.groupSettings ?? {}) },
+    groupQuotation: stored.groupQuotation
+      ? { ...fallback.groupQuotation, ...stored.groupQuotation }
+      : fallback.groupQuotation,
   };
 }
 
@@ -148,6 +153,7 @@ function makeDefault(pax: number, name: string, dest: string): ProfessionalCalcS
     marginPercent: 10,
     discount: 0,
     groupSettings: { ...DEFAULT_GROUP_SETTINGS },
+    groupQuotation: { ...DEFAULT_GROUP_QUOTATION },
   };
 }
 
@@ -698,7 +704,7 @@ export default function PackageDetail() {
 
   useEffect(() => {
     const tab = searchParams.get("tab");
-    setActiveTab(tab === "jamaah" ? "jamaah" : "calculator");
+    setActiveTab(tab === "jamaah" ? "jamaah" : tab === "penawaran" ? "penawaran" : "calculator");
     if (searchParams.get("ocr") === "1") {
       setAddOpen(true);
       const next = new URLSearchParams(searchParams);
@@ -1017,12 +1023,15 @@ export default function PackageDetail() {
 
       {/* ── Tabs ── */}
       <Tabs value={activeTab} onValueChange={(v) => { setActiveTab(v); setSearchParams({ tab: v }, { replace: true }); }} className="space-y-3 md:space-y-4">
-        <TabsList className="grid w-full grid-cols-2 rounded-xl h-9 md:h-10 md:rounded-2xl">
+        <TabsList className="grid w-full grid-cols-3 rounded-xl h-9 md:h-10 md:rounded-2xl">
           <TabsTrigger value="calculator" className="rounded-lg md:rounded-xl text-xs md:text-sm" style={M}>
             <Calculator className="h-3.5 w-3.5 mr-1 md:mr-1.5" />Kalkulator
           </TabsTrigger>
           <TabsTrigger value="jamaah" className="rounded-lg md:rounded-xl text-xs md:text-sm" style={M}>
             <Users className="h-3.5 w-3.5 mr-1 md:mr-1.5" />Jamaah
+          </TabsTrigger>
+          <TabsTrigger value="penawaran" className="rounded-lg md:rounded-xl text-xs md:text-sm" style={M}>
+            <FileKey className="h-3.5 w-3.5 mr-1 md:mr-1.5" />Penawaran
           </TabsTrigger>
         </TabsList>
 
@@ -1885,6 +1894,24 @@ export default function PackageDetail() {
               )}
             </div>
           )}
+        </TabsContent>
+
+        {/* ══════════════════════════════════════════════════════════════════════
+            PENAWARAN GRUP TAB
+        ══════════════════════════════════════════════════════════════════════ */}
+        <TabsContent value="penawaran">
+          <GroupQuotationTab
+            quotation={calc.groupQuotation ?? DEFAULT_GROUP_QUOTATION}
+            onChange={(q) => setField("groupQuotation", q)}
+            perPaxFromCalc={quote?.perPaxFinal ?? 0}
+            hotelNamesFromCalc={calc.hotels.map((h) => h.label).filter(Boolean)}
+            packageNameFromCalc={calc.packageName}
+            durationFromCalc={
+              pkg.days
+                ? `${pkg.days} Hari ${Math.max(0, pkg.days - 1)} Malam`
+                : ""
+            }
+          />
         </TabsContent>
 
         {/* ══════════════════════════════════════════════════════════════════════
