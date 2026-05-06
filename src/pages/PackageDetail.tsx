@@ -741,9 +741,16 @@ export default function PackageDetail() {
     }
   }, [id, pkg?.id]);
 
+  const saveTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   useEffect(() => {
     if (!id || !calc) return;
-    savePackageCalc(id, calc);
+    if (saveTimerRef.current) clearTimeout(saveTimerRef.current);
+    saveTimerRef.current = setTimeout(() => {
+      savePackageCalc(id, calc);
+    }, 1500);
+    return () => {
+      if (saveTimerRef.current) clearTimeout(saveTimerRef.current);
+    };
   }, [id, calc]);
 
   const effectiveRates = useMemo(() => ({
