@@ -1,4 +1,4 @@
-import { useEffect } from "react";
+import { lazy, Suspense, useEffect } from "react";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { BrowserRouter, Route, Routes, useLocation, Navigate } from "react-router-dom";
 import { Toaster as Sonner } from "@/components/ui/sonner";
@@ -7,20 +7,32 @@ import { TooltipProvider } from "@/components/ui/tooltip";
 import { DashboardLayout } from "@/components/DashboardLayout";
 import { PwaInstallPrompt } from "@/components/PwaInstallPrompt";
 import { OfflineBar } from "@/components/OfflineBar";
+import { Loader2 } from "lucide-react";
+
 import Index from "./pages/Index.tsx";
-import Calculator from "./pages/Calculator";
-import Packages from "./pages/Packages";
-import PackageDetail from "./pages/PackageDetail";
-import ProgressTracker from "./pages/ProgressTracker";
-import TripDetail from "./pages/TripDetail";
-import JamaahProfile from "./pages/JamaahProfile";
-import Settings from "./pages/Settings";
 import Login from "./pages/Login";
-import PublicCheck from "./pages/PublicCheck";
 import Auth from "./pages/Auth";
+import PublicCheck from "./pages/PublicCheck";
 import NotFound from "./pages/NotFound.tsx";
-import Notes from "./pages/Notes";
-import ExportCenter from "./pages/ExportCenter";
+
+const Calculator    = lazy(() => import("./pages/Calculator"));
+const Packages      = lazy(() => import("./pages/Packages"));
+const PackageDetail = lazy(() => import("./pages/PackageDetail"));
+const ProgressTracker = lazy(() => import("./pages/ProgressTracker"));
+const TripDetail    = lazy(() => import("./pages/TripDetail"));
+const JamaahProfile = lazy(() => import("./pages/JamaahProfile"));
+const Settings      = lazy(() => import("./pages/Settings"));
+const Notes         = lazy(() => import("./pages/Notes"));
+const ExportCenter  = lazy(() => import("./pages/ExportCenter"));
+
+function PageSpinner() {
+  return (
+    <div className="min-h-screen flex flex-col items-center justify-center gap-3 bg-background">
+      <Loader2 className="h-8 w-8 animate-spin text-primary" />
+      <p className="text-sm text-muted-foreground">Memuat halaman…</p>
+    </div>
+  );
+}
 import { useRatesStore } from "@/store/ratesStore";
 import { usePackagesStore } from "@/store/packagesStore";
 import { useTripsStore } from "@/store/tripsStore";
@@ -135,28 +147,30 @@ function SyncStatusBootstrap() {
 function AnimatedRoutes() {
   const location = useLocation();
   return (
-    <Routes location={location}>
-      <Route path="/login" element={<Login />} />
-      <Route path="/bootstrap" element={<Auth />} />
-      <Route path="/cek" element={<PublicCheck />} />
-      <Route path="/cek/:code" element={<PublicCheck />} />
+    <Suspense fallback={<PageSpinner />}>
+      <Routes location={location}>
+        <Route path="/login" element={<Login />} />
+        <Route path="/bootstrap" element={<Auth />} />
+        <Route path="/cek" element={<PublicCheck />} />
+        <Route path="/cek/:code" element={<PublicCheck />} />
 
-      <Route path="/" element={<RequireAuth><Index /></RequireAuth>} />
-      <Route path="/calculator" element={<RequireAuth><DashboardLayout><Calculator /></DashboardLayout></RequireAuth>} />
-      <Route path="/packages" element={<RequireAuth><DashboardLayout><Packages /></DashboardLayout></RequireAuth>} />
-      <Route path="/packages/:id" element={<RequireAuth><DashboardLayout><PackageDetail /></DashboardLayout></RequireAuth>} />
-      <Route path="/progress" element={<RequireAuth><DashboardLayout><ProgressTracker /></DashboardLayout></RequireAuth>} />
-      <Route path="/trips/:id" element={<RequireAuth><DashboardLayout><TripDetail /></DashboardLayout></RequireAuth>} />
-      <Route path="/trips/:id/jamaah/:jamaahId" element={<RequireAuth><DashboardLayout><JamaahProfile /></DashboardLayout></RequireAuth>} />
-      {/* Alias /paket — terminologi UI sesuai sidebar "Paket Trip" */}
-      <Route path="/paket/:id" element={<RequireAuth><DashboardLayout><TripDetail /></DashboardLayout></RequireAuth>} />
-      <Route path="/paket/:id/jamaah/:jamaahId" element={<RequireAuth><DashboardLayout><JamaahProfile /></DashboardLayout></RequireAuth>} />
-      <Route path="/notes" element={<RequireAuth><DashboardLayout><Notes /></DashboardLayout></RequireAuth>} />
-      <Route path="/exports" element={<RequireAuth><DashboardLayout><ExportCenter /></DashboardLayout></RequireAuth>} />
-      <Route path="/settings" element={<RequireAuth><DashboardLayout><Settings /></DashboardLayout></RequireAuth>} />
-      <Route path="/auth" element={<Navigate to="/login" replace />} />
-      <Route path="*" element={<NotFound />} />
-    </Routes>
+        <Route path="/" element={<RequireAuth><Index /></RequireAuth>} />
+        <Route path="/calculator" element={<RequireAuth><DashboardLayout><Calculator /></DashboardLayout></RequireAuth>} />
+        <Route path="/packages" element={<RequireAuth><DashboardLayout><Packages /></DashboardLayout></RequireAuth>} />
+        <Route path="/packages/:id" element={<RequireAuth><DashboardLayout><PackageDetail /></DashboardLayout></RequireAuth>} />
+        <Route path="/progress" element={<RequireAuth><DashboardLayout><ProgressTracker /></DashboardLayout></RequireAuth>} />
+        <Route path="/trips/:id" element={<RequireAuth><DashboardLayout><TripDetail /></DashboardLayout></RequireAuth>} />
+        <Route path="/trips/:id/jamaah/:jamaahId" element={<RequireAuth><DashboardLayout><JamaahProfile /></DashboardLayout></RequireAuth>} />
+        {/* Alias /paket — terminologi UI sesuai sidebar "Paket Trip" */}
+        <Route path="/paket/:id" element={<RequireAuth><DashboardLayout><TripDetail /></DashboardLayout></RequireAuth>} />
+        <Route path="/paket/:id/jamaah/:jamaahId" element={<RequireAuth><DashboardLayout><JamaahProfile /></DashboardLayout></RequireAuth>} />
+        <Route path="/notes" element={<RequireAuth><DashboardLayout><Notes /></DashboardLayout></RequireAuth>} />
+        <Route path="/exports" element={<RequireAuth><DashboardLayout><ExportCenter /></DashboardLayout></RequireAuth>} />
+        <Route path="/settings" element={<RequireAuth><DashboardLayout><Settings /></DashboardLayout></RequireAuth>} />
+        <Route path="/auth" element={<Navigate to="/login" replace />} />
+        <Route path="*" element={<NotFound />} />
+      </Routes>
+    </Suspense>
   );
 }
 

@@ -1,4 +1,4 @@
-import { createWorker, type Worker as TesseractWorker } from "tesseract.js";
+import type { Worker as TesseractWorker } from "tesseract.js";
 import { supabase } from "./supabase";
 
 /* ────────────────────────────── Reusable Tesseract worker pool ──────────────
@@ -31,6 +31,7 @@ let _creatingCount = 0;
 
 async function createPooledWorker(): Promise<PooledWorker> {
   let activeLogger: ((m: { status?: string; progress?: number }) => void) | null = null;
+  const { createWorker } = await import("tesseract.js");
   const worker = await createWorker("eng", 1, {
     logger: (m: { status?: string; progress?: number }) => {
       if (activeLogger) activeLogger(m);

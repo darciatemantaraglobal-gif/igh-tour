@@ -1,5 +1,4 @@
 import { useEffect, useMemo, useState } from "react";
-import * as XLSX from "xlsx";
 import { Download, FileSpreadsheet, Users, Plane, Loader2 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
@@ -29,10 +28,11 @@ export default function ExportCenter() {
   const trip = useMemo(() => trips.find((t) => t.id === tripId), [trips, tripId]);
   const safeName = (s: string) => s.replace(/[^a-zA-Z0-9-_]+/g, "_").slice(0, 40);
 
-  const exportRoomingList = () => {
+  const exportRoomingList = async () => {
     if (!trip || jamaah.length === 0) return;
     setExporting("rooming");
     try {
+      const XLSX = await import("xlsx");
       const rows = [...jamaah].sort((a, b) => {
         if (a.gender !== b.gender) return (a.gender || "Z").localeCompare(b.gender || "Z");
         return a.name.localeCompare(b.name);
@@ -63,10 +63,11 @@ export default function ExportCenter() {
     }
   };
 
-  const exportFlightManifest = () => {
+  const exportFlightManifest = async () => {
     if (!trip || jamaah.length === 0) return;
     setExporting("manifest");
     try {
+      const XLSX = await import("xlsx");
       const data = jamaah.map((j, idx) => ({
         No: idx + 1,
         "Nama Lengkap (sesuai paspor)": j.name,
