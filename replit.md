@@ -8,7 +8,7 @@ Aplikasi manajemen Umrah & Haji untuk travel agency — kelola trip, jamaah, pak
 - **Build**: `npm run build`
 - **Preview prod build**: `npm run preview`
 - **Test**: `npm test`
-- **Required env vars** (set in Replit Secrets/Env Vars):
+- **Required env vars** (set in Replit Secrets):
   - `VITE_SUPABASE_URL` — Supabase project URL
   - `VITE_SUPABASE_ANON_KEY` — Supabase anon/public key (safe to expose, protected by RLS)
   - `VITE_OPENAI_API_KEY` — (optional) enables direct browser OCR via gpt-4o-mini
@@ -21,7 +21,7 @@ Aplikasi manajemen Umrah & Haji untuk travel agency — kelola trip, jamaah, pak
 - **State**: Zustand stores with localStorage write-through cache
 - **Backend**: Supabase (PostgreSQL + Auth + Storage + Realtime + Edge Functions)
 - **PDF**: pdf-lib + pdfjs-dist
-- **OCR**: Tesseract.js (local) + OpenAI gpt-4o-mini (AI fallback)
+- **OCR**: Tesseract.js (local) + OpenAI gpt-4o-mini (AI fallback via Supabase Edge Function)
 - **PWA**: vite-plugin-pwa with Workbox
 
 ## Where things live
@@ -67,6 +67,7 @@ Aplikasi manajemen Umrah & Haji untuk travel agency — kelola trip, jamaah, pak
 - Service worker disabled in dev mode to prevent Vite HMR cache conflicts
 - `VITE_` prefix vars are intentionally browser-exposed; security relies on Supabase RLS
 - Delete operations use `.select("id")` chained after `.delete()` to detect RLS-blocked silent failures
+- Replit Secrets: `VITE_SUPABASE_URL` and `VITE_SUPABASE_ANON_KEY` must be set for the app to load
 
 ## Pointers
 
