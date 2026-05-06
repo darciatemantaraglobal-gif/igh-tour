@@ -154,11 +154,10 @@ export interface ProfessionalQuote {
 function rollup(
   hpp: number,
   commissionFee: number,
-  marginPercent: number,
+  marginIDR: number,
   discount: number,
   safePax: number,
 ): Pick<ProfessionalQuote, "hpp" | "commissionFee" | "marginIDR" | "sellingPrice" | "discount" | "finalPrice" | "perPaxFinal" | "netProfit"> {
-  const marginIDR = hpp * (marginPercent / 100);
   const sellingPrice = hpp + commissionFee + marginIDR;
   const finalPrice = Math.max(0, sellingPrice - discount);
   const perPaxFinal = finalPrice / safePax;
@@ -179,6 +178,10 @@ export interface ProfessionalCalcInput {
   staffs: StaffRow[];
   commissionFee: number;
   marginPercent: number;
+  /** "percent" = pakai marginPercent (default), "fixed" = pakai marginFixed (IDR/pax) */
+  marginMode?: "percent" | "fixed";
+  /** Profit per pax dalam IDR, dipakai hanya jika marginMode === "fixed" */
+  marginFixed?: number;
   discount: number;
   rates: Rates;
 }
@@ -299,11 +302,15 @@ export function computeProfessionalQuote(input: ProfessionalCalcInput): Professi
 
   const hpp = hotelIDR + transportIDR + ticketIDR + visaIDR + destinationIDR + fnbIDR + staffIDR;
 
+  const effectiveMarginIDR = input.marginMode === "fixed"
+    ? (input.marginFixed ?? 0) * safePax
+    : hpp * (input.marginPercent / 100);
+
   return {
     breakdown,
     hotelIDR, transportIDR, ticketIDR, visaIDR, destinationIDR, fnbIDR, staffIDR,
     totalSAR, totalUSD,
-    ...rollup(hpp, commissionFee, marginPercent, discount, safePax),
+    ...rollup(hpp, commissionFee, effectiveMarginIDR, discount, safePax),
   };
 }
 
@@ -403,6 +410,10 @@ export interface GroupMatrixInput {
   staffs: StaffRow[];
   commissionFee: number; // IDR, di-add per grup
   marginPercent: number;
+  /** "percent" = pakai marginPercent (default), "fixed" = pakai marginFixed (IDR/pax) */
+  marginMode?: "percent" | "fixed";
+  /** Profit per pax dalam IDR, dipakai hanya jika marginMode === "fixed" */
+  marginFixed?: number;
   discount: number;      // IDR, di-subtract per grup
   rates: Rates;
   /** Tier pax yang mau dihitung */
@@ -457,7 +468,7 @@ function toIDRWith(amount: number, cur: "IDR" | "SAR" | "USD", rates: Rates): nu
 export function computeGroupMatrix(input: GroupMatrixInput): GroupMatrixQuote {
   const {
     hotels, transports, visas, destinations, staffs,
-    commissionFee, marginPercent, discount, rates,
+    commissionFee, marginPercent, marginMode, marginFixed, discount, rates,
     tiers, roomTypes, displayCurrency,
   } = input;
   const tickets = input.tickets ?? [];
@@ -560,7 +571,10 @@ export function computeGroupMatrix(input: GroupMatrixInput): GroupMatrixQuote {
       const hotelPerPaxIDR = hotelTotalIDR / pax; // share of hotel per pax
       const hppGroupIDR = fixedTotalIDR + hotelTotalIDR + perPaxFlatIDR * pax;
       const hppPerPaxIDR = hppGroupIDR / pax;
-      const sellingGroupIDR = hppGroupIDR * (1 + marginPercent / 100) - discount;
+      const marginGroupIDR = marginMode === "fixed"
+        ? (marginFixed ?? 0) * pax
+        : hppGroupIDR * (marginPercent / 100);
+      const sellingGroupIDR = hppGroupIDR + marginGroupIDR - discount;
       const perPaxIDR = Math.max(0, sellingGroupIDR / pax);
 
       // convert to display currency

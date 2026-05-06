@@ -65,6 +65,8 @@ interface CalcState {
   generalCosts: GeneralCostRow[];
   commissionFee: number;
   marginPercent: number;
+  marginMode: "percent" | "fixed";
+  marginFixed: number;
   discount: number;
   localRateSAR: number;
   localRateUSD: number;
@@ -163,6 +165,8 @@ function makeDefault(): CalcState {
     generalCosts: DEFAULT_GENERAL_COSTS.map((c) => ({ ...c })),
     commissionFee: 0,
     marginPercent: 10,
+    marginMode: "percent",
+    marginFixed: 0,
     discount: 0,
     localRateSAR: 0,
     localRateUSD: 0,
@@ -604,6 +608,8 @@ export default function Calculator() {
       staffs: calc.staffs,
       commissionFee: calc.commissionFee,
       marginPercent: calc.marginPercent,
+      marginMode: calc.marginMode,
+      marginFixed: calc.marginFixed,
       discount: calc.discount,
       rates: effectiveRates,
     });
@@ -744,6 +750,8 @@ export default function Calculator() {
       staffs: calc.staffs,
       commissionFee: calc.commissionFee,
       marginPercent: calc.marginPercent,
+      marginMode: calc.marginMode,
+      marginFixed: calc.marginFixed,
       discount: calc.discount,
       rates: effectiveRates,
       tiers: groupTiers,
@@ -1029,6 +1037,8 @@ export default function Calculator() {
         generalCosts: calc.generalCosts,
         commissionFee: calc.commissionFee,
         marginPercent: calc.marginPercent,
+        marginMode: calc.marginMode,
+        marginFixed: calc.marginFixed,
         discount: calc.discount,
         groupSettings: calc.groupSettings,
       };
@@ -1735,17 +1745,42 @@ export default function Calculator() {
             <p style={M} className="text-[10px] text-muted-foreground">Nominal IDR tambahan di atas HPP</p>
           </div>
           <div className="space-y-2">
-            <label style={M} className="text-[10px] font-bold text-orange-700 uppercase tracking-wider">
-              Acceptable Profit / Margin ({calc.marginPercent}%)
-            </label>
-            <Slider
-              value={[calc.marginPercent]}
-              min={0} max={50} step={1}
-              onValueChange={(v) => setField("marginPercent", v[0])}
-            />
-            <div className="flex justify-between text-[10px] text-orange-400 font-medium">
-              <span>0%</span><span>25%</span><span>50%</span>
+            <div className="flex items-center justify-between gap-1 flex-wrap">
+              <label style={M} className="text-[10px] font-bold text-orange-700 uppercase tracking-wider">
+                Profit / Margin
+              </label>
+              <div className="flex rounded-md overflow-hidden border border-orange-200 text-[10px] font-bold shrink-0">
+                <button
+                  type="button"
+                  style={M}
+                  onClick={() => setField("marginMode", "percent")}
+                  className={`px-2 py-0.5 transition-colors ${calc.marginMode !== "fixed" ? "bg-orange-500 text-white" : "bg-white text-orange-600 hover:bg-orange-50"}`}
+                >% Persen</button>
+                <button
+                  type="button"
+                  style={M}
+                  onClick={() => setField("marginMode", "fixed")}
+                  className={`px-2 py-0.5 border-l border-orange-200 transition-colors ${calc.marginMode === "fixed" ? "bg-orange-500 text-white" : "bg-white text-orange-600 hover:bg-orange-50"}`}
+                >IDR Tetap</button>
+              </div>
             </div>
+            {calc.marginMode === "fixed" ? (
+              <>
+                <NumCell value={calc.marginFixed} onChange={(v) => setField("marginFixed", v)} placeholder="0" />
+                <p style={M} className="text-[10px] text-muted-foreground">Profit per pax (IDR) — total = × jumlah pax</p>
+              </>
+            ) : (
+              <>
+                <Slider
+                  value={[calc.marginPercent]}
+                  min={0} max={50} step={1}
+                  onValueChange={(v) => setField("marginPercent", v[0])}
+                />
+                <div className="flex justify-between text-[10px] text-orange-400 font-medium">
+                  <span>{calc.marginPercent}%</span><span>25%</span><span>50%</span>
+                </div>
+              </>
+            )}
           </div>
           <div className="space-y-2">
             <label style={M} className="text-[10px] font-bold text-orange-700 uppercase tracking-wider">
@@ -1773,6 +1808,8 @@ export default function Calculator() {
               staffs: calc.staffs,
               commissionFee: calc.commissionFee,
               marginPercent: calc.marginPercent,
+              marginMode: calc.marginMode,
+              marginFixed: calc.marginFixed,
               discount: calc.discount,
             }}
             rates={effectiveRates}
@@ -1835,7 +1872,7 @@ export default function Calculator() {
                   const lines: string[] = [];
                   lines.push(`Matriks Harga Jual per Tier - ${projectName}`);
                   lines.push(`Display Currency:;${cur}`);
-                  lines.push(`Margin:;${calc.marginPercent}%`);
+                  lines.push(`Margin:;${calc.marginMode === "fixed" ? `IDR ${calc.marginFixed.toLocaleString("id-ID")}/pax` : `${calc.marginPercent}%`}`);
                   lines.push(`Round To:;${calc.groupSettings.roundTo}`);
                   lines.push("");
                   lines.push(["Pax Tier", ...rooms, `HPP/pax (IDR)`].map(esc).join(";"));
@@ -1961,7 +1998,11 @@ export default function Calculator() {
                       </div>
                       <div className="col-span-2 md:col-span-1">
                         <p style={M} className="text-orange-700/70 uppercase tracking-wide font-bold">Margin Setting</p>
-                        <p style={M} className="font-mono font-extrabold text-emerald-700">+{calc.marginPercent}%</p>
+                        <p style={M} className="font-mono font-extrabold text-emerald-700">
+                          {calc.marginMode === "fixed"
+                            ? `+${formatCurrency(calc.marginFixed)}/pax`
+                            : `+${calc.marginPercent}%`}
+                        </p>
                         <p style={M} className="text-slate-500">
                           Rate SAR <span className="font-mono">{fmtSAR(1)}</span> · USD <span className="font-mono">{fmtUSD(1)}</span>
                         </p>
@@ -2031,7 +2072,7 @@ export default function Calculator() {
                     {[
                       { label: "Total Budget (HPP)", value: quote.hpp, sub: `${formatCurrency(quote.hpp / safePax)}/pax`, color: "" },
                       { label: `+ Commission Fee Admin`, value: quote.commissionFee, sub: `${formatCurrency(quote.commissionFee / safePax)}/pax`, color: "text-amber-600" },
-                      { label: `+ Profit Margin (${calc.marginPercent}%)`, value: quote.marginIDR, sub: `${formatCurrency(quote.marginIDR / safePax)}/pax`, color: "text-emerald-600" },
+                      { label: calc.marginMode === "fixed" ? `+ Profit Margin (${formatCurrency(calc.marginFixed)}/pax)` : `+ Profit Margin (${calc.marginPercent}%)`, value: quote.marginIDR, sub: `${formatCurrency(quote.marginIDR / safePax)}/pax`, color: "text-emerald-600" },
                     ].map((r) => (
                       <div key={r.label} className="flex items-center justify-between gap-2">
                         <div>

@@ -49,6 +49,8 @@ interface Props {
     staffs: StaffRow[];
     commissionFee: number;
     marginPercent: number;
+    marginMode?: "percent" | "fixed";
+    marginFixed?: number;
     discount: number;
   };
   rates: Rates;
@@ -193,7 +195,10 @@ export function GroupMatrixSection({ settings, onChange, inputs, rates }: Props)
             Matrix Harga Group ({settings.displayCurrency})
           </span>
           <span className="ml-auto text-[10px] opacity-80">
-            harga/pax · sudah include margin {inputs.marginPercent}%
+            harga/pax · sudah include margin{" "}
+            {inputs.marginMode === "fixed"
+              ? `IDR ${(inputs.marginFixed ?? 0).toLocaleString("id-ID")}/pax`
+              : `${inputs.marginPercent}%`}
           </span>
         </div>
         <div className="overflow-x-auto">
