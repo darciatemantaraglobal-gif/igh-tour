@@ -907,7 +907,7 @@ export default function Calculator() {
       pricePerPaxIDR: quote?.perPaxFinal ?? 0,
       kursIdrPerUsd: effectiveRates.USD,
       kursIdrPerSar: effectiveRates.SAR,
-      included: userIncluded.length > 0 ? userIncluded : derivedIncluded.slice(0, 5),
+      included: userIncluded.length > 0 ? userIncluded : derivedIncluded.slice(0, 6),
       excluded: userExcluded.length > 0 ? userExcluded : defaultExcluded,
       mode: isGroupMode ? "group" : "private",
       groupPricing: groupPricingRows,

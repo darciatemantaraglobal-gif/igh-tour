@@ -641,12 +641,17 @@ export async function buildIghPdf(data: IghPdfData, layout?: Partial<IghLayoutCo
 
   const listFont = fontFor("checklist", "semiBold");
   const firstBaselinePxResolved = cfg.checklist.firstBaselinePx + cfg.checklist.yOffsetPx;
-  const MAX_LIST_ROWS = 5; // cap supaya gak nge-overflow ke footer area
+  // Template cetak selalu punya 5 garis pembatas (01..05) — mask tetap 5.
+  // Tapi private template punya ruang lebih ke footer (715+5×28=855px < 891px footer)
+  // sehingga bisa tampilkan 6 item. Group template lebih padat (775+5×26=905px > 891px)
+  // sehingga tetap dibatasi 5.
+  const MASK_ROWS = 5;
+  const MAX_LIST_ROWS = data.mode === "group" ? 5 : 6;
   // ROW_BASELINES masih dipakai utk mask divider — generate berdasar config
   // rowSpacingPx (visual sekat asli template di interval ini, bukan dependent
   // ke berapa baris item beneran). Mask cuma sebatas LINE under tiap "row slot",
   // jadi cocok di posisi template asli.
-  const ROW_BASELINES_FOR_MASK = Array.from({ length: MAX_LIST_ROWS }, (_, i) =>
+  const ROW_BASELINES_FOR_MASK = Array.from({ length: MASK_ROWS }, (_, i) =>
     cfg.checklist.firstBaselinePx + i * cfg.checklist.rowSpacingPx + cfg.checklist.yOffsetPx,
   );
   const includedItems = splitOverrideOrUse(cfg.checklist.includedText, data.included);
