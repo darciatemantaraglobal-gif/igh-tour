@@ -109,11 +109,23 @@ export async function createPayment(draft: Omit<Payment, "id" | "createdAt">): P
 
 export async function deletePayment(id: string): Promise<void> {
   if (isSupabaseConfigured()) {
-    // fetch proof_url first to clean up storage
-    const { data } = await supabase!.from("payments").select("proof_url").eq("id", id).maybeSingle();
-    const proofPath = (data?.proof_url as string) || "";
-    const { error } = await supabase!.from("payments").delete().eq("id", id);
-    if (error) throw error;
+    // Satu query: DELETE ... RETURNING proof_url — tidak perlu SELECT dulu.
+    const { data, error } = await supabase!
+      .from("payments")
+      .delete()
+      .eq("id", id)
+      .select("proof_url");
+    if (error) {
+      console.error(`[payments] DELETE id=${id} gagal:`, error);
+      throw error;
+    }
+    if (!data || data.length === 0) {
+      throw new Error(
+        "Hapus pembayaran gagal — server tidak menghapus baris " +
+        "(kemungkinan RLS DELETE policy nge-blok). Cek policy \"payments_delete\" di Supabase.",
+      );
+    }
+    const proofPath = (data[0]?.proof_url as string) || "";
     if (proofPath) await deletePaymentProof(proofPath);
   }
 }
