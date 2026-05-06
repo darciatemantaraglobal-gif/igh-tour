@@ -75,6 +75,8 @@ interface CalcState {
   dateRange: string;
   hotelMakkahName: string;
   hotelMadinahName: string;
+  makkahNightsOverride?: number;
+  madinahNightsOverride?: number;
   includedItems: string[];
   excludedItems: string[];
   // Group offer extras
@@ -894,9 +896,13 @@ export default function Calculator() {
       customerName: calc.customerName || "—",
       date: new Date().toLocaleDateString("id-ID", { day: "2-digit", month: "long", year: "numeric" }),
       hotelMakkah: calc.hotelMakkahName || makkahHotel?.label || "",
-      makkahNights: makkahHotel?.days || 0,
+      makkahNights: (typeof calc.makkahNightsOverride === "number" && calc.makkahNightsOverride > 0)
+        ? calc.makkahNightsOverride
+        : (makkahHotel?.days || 0),
       hotelMadinah: calc.hotelMadinahName || madinahHotel?.label || "",
-      madinahNights: madinahHotel?.days || 0,
+      madinahNights: (typeof calc.madinahNightsOverride === "number" && calc.madinahNightsOverride > 0)
+        ? calc.madinahNightsOverride
+        : (madinahHotel?.days || 0),
       pax: calc.pax || 0,
       pricePerPaxIDR: quote?.perPaxFinal ?? 0,
       kursIdrPerUsd: effectiveRates.USD,
@@ -1620,6 +1626,8 @@ export default function Calculator() {
           dateRange: calc.dateRange,
           hotelMakkahName: calc.hotelMakkahName,
           hotelMadinahName: calc.hotelMadinahName,
+          makkahNightsOverride: calc.makkahNightsOverride,
+          madinahNightsOverride: calc.madinahNightsOverride,
           includedItems: calc.includedItems,
           excludedItems: calc.excludedItems,
           tier: calc.tier,

@@ -9,6 +9,10 @@ export interface QuotationMeta {
   dateRange: string;
   hotelMakkahName: string;
   hotelMadinahName: string;
+  /** Override manual jumlah malam Makkah di PDF. 0/undefined = pakai auto dari hotel row. */
+  makkahNightsOverride?: number;
+  /** Override manual jumlah malam Madinah di PDF. 0/undefined = pakai auto dari hotel row. */
+  madinahNightsOverride?: number;
   includedItems: string[];
   excludedItems: string[];
   // ── Group offer (PDF gaya "Penawaran Paket LA") ──
@@ -341,25 +345,63 @@ export function QuotationMetaSection({ value, onChange }: Props) {
           </label>
           <label className="flex flex-col gap-1 col-span-2">
             <span style={M} className="text-[10px] font-bold text-slate-600">Hotel Makkah</span>
-            <input
-              type="text"
-              value={value.hotelMakkahName}
-              onChange={(e) => set("hotelMakkahName", e.target.value)}
-              placeholder="cth: Pullman Zamzam Makkah"
-              style={M}
-              className="h-8 px-2 rounded-lg border border-slate-200 bg-white text-[12px] font-semibold focus:outline-none focus:ring-1 focus:ring-orange-400"
-            />
+            <div className="flex gap-1.5">
+              <input
+                type="text"
+                value={value.hotelMakkahName}
+                onChange={(e) => set("hotelMakkahName", e.target.value)}
+                placeholder="cth: Pullman Zamzam Makkah"
+                style={M}
+                className="flex-1 h-8 px-2 rounded-lg border border-slate-200 bg-white text-[12px] font-semibold focus:outline-none focus:ring-1 focus:ring-orange-400"
+              />
+              <div className="flex items-center gap-1 shrink-0">
+                <input
+                  type="number"
+                  min={0}
+                  max={99}
+                  value={value.makkahNightsOverride ?? ""}
+                  onChange={(e) => {
+                    const v = e.target.value === "" ? undefined : Math.max(0, parseInt(e.target.value) || 0);
+                    set("makkahNightsOverride", v as number);
+                  }}
+                  placeholder="auto"
+                  title="Jumlah malam Makkah di PDF (kosong = otomatis dari hotel row)"
+                  style={M}
+                  className="w-16 h-8 px-2 rounded-lg border border-orange-300 bg-orange-50 text-[12px] font-bold text-orange-700 focus:outline-none focus:ring-1 focus:ring-orange-400 text-center"
+                />
+                <span style={M} className="text-[10px] font-bold text-slate-500 whitespace-nowrap">mlm</span>
+              </div>
+            </div>
           </label>
           <label className="flex flex-col gap-1 col-span-2">
             <span style={M} className="text-[10px] font-bold text-slate-600">Hotel Madinah</span>
-            <input
-              type="text"
-              value={value.hotelMadinahName}
-              onChange={(e) => set("hotelMadinahName", e.target.value)}
-              placeholder="cth: Frontel Al Harithia"
-              style={M}
-              className="h-8 px-2 rounded-lg border border-slate-200 bg-white text-[12px] font-semibold focus:outline-none focus:ring-1 focus:ring-orange-400"
-            />
+            <div className="flex gap-1.5">
+              <input
+                type="text"
+                value={value.hotelMadinahName}
+                onChange={(e) => set("hotelMadinahName", e.target.value)}
+                placeholder="cth: Frontel Al Harithia"
+                style={M}
+                className="flex-1 h-8 px-2 rounded-lg border border-slate-200 bg-white text-[12px] font-semibold focus:outline-none focus:ring-1 focus:ring-orange-400"
+              />
+              <div className="flex items-center gap-1 shrink-0">
+                <input
+                  type="number"
+                  min={0}
+                  max={99}
+                  value={value.madinahNightsOverride ?? ""}
+                  onChange={(e) => {
+                    const v = e.target.value === "" ? undefined : Math.max(0, parseInt(e.target.value) || 0);
+                    set("madinahNightsOverride", v as number);
+                  }}
+                  placeholder="auto"
+                  title="Jumlah malam Madinah di PDF (kosong = otomatis dari hotel row)"
+                  style={M}
+                  className="w-16 h-8 px-2 rounded-lg border border-orange-300 bg-orange-50 text-[12px] font-bold text-orange-700 focus:outline-none focus:ring-1 focus:ring-orange-400 text-center"
+                />
+                <span style={M} className="text-[10px] font-bold text-slate-500 whitespace-nowrap">mlm</span>
+              </div>
+            </div>
           </label>
           <label className="flex flex-col gap-1 col-span-2">
             <span style={M} className="text-[10px] font-bold text-slate-600">Website</span>
