@@ -460,7 +460,7 @@ export default function JamaahProfile() {
   const navigate = useNavigate();
   const trips = useTripsStore((s) => s.trips);
   const { formatDate } = useRegional();
-  const { jamaah, fetchJamaah, patchJamaah } = useJamaahStore();
+  const { jamaah, fetchJamaah, patchJamaah, getOne } = useJamaahStore();
   const { docs, fetchDocs } = useDocsStore();
   const photoInputRef = useRef<HTMLInputElement>(null);
   const ocrInputRef = useRef<HTMLInputElement>(null);
@@ -469,6 +469,9 @@ export default function JamaahProfile() {
   const [form, setForm] = useState<Partial<Jamaah>>({});
   const [ocrLoading, setOcrLoading] = useState(false);
   const [ocrProgress, setOcrProgress] = useState(0);
+  // Foto di-fetch terpisah karena listJamaah sengaja exclude photo_data_url
+  // (bisa ratusan KB base64 per orang). Hanya JamaahProfile yang butuh foto penuh.
+  const [localPhotoDataUrl, setLocalPhotoDataUrl] = useState<string | undefined>();
 
   const trip = trips.find((t) => t.id === tripId);
   const person = jamaah.find((j) => j.id === jamaahId);
@@ -477,6 +480,14 @@ export default function JamaahProfile() {
     if (tripId) fetchJamaah(tripId);
     if (jamaahId) fetchDocs(jamaahId);
   }, [tripId, jamaahId, fetchJamaah, fetchDocs]);
+
+  // Fetch foto terpisah — getOne pakai select("*") yang include photo_data_url.
+  useEffect(() => {
+    if (!jamaahId) return;
+    getOne(jamaahId).then((full) => {
+      if (full?.photoDataUrl) setLocalPhotoDataUrl(full.photoDataUrl);
+    });
+  }, [jamaahId]);
 
   useEffect(() => {
     if (person) setForm({ name: person.name, phone: person.phone, birthDate: person.birthDate, passportNumber: person.passportNumber, passportExpiry: person.passportExpiry, gender: person.gender, needsReview: person.needsReview });
@@ -521,6 +532,7 @@ export default function JamaahProfile() {
     if (file.size > 12 * 1024 * 1024) { toast.error("Foto terlalu besar (maks 12 MB)."); return; }
     const dataUrl = await fileToBase64(file);
     await patchJamaah(jamaahId, { photoDataUrl: dataUrl });
+    setLocalPhotoDataUrl(dataUrl);
     toast.success("Foto profil diperbarui.");
   };
 
@@ -590,8 +602,8 @@ export default function JamaahProfile() {
                 "h-24 w-24 rounded-2xl border-4 border-white shadow-md overflow-hidden flex items-center justify-center text-white text-3xl font-bold",
                 person.gender === "P" ? "bg-gradient-to-br from-pink-400 to-rose-500" : "bg-gradient-to-br from-blue-400 to-indigo-500"
               )}>
-                {person.photoDataUrl
-                  ? <img src={person.photoDataUrl} alt={person.name} className="h-full w-full object-cover" />
+                {localPhotoDataUrl
+                  ? <img src={localPhotoDataUrl} alt={person.name} className="h-full w-full object-cover" />
                   : person.name.charAt(0).toUpperCase()}
               </div>
               <button

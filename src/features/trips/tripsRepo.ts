@@ -259,9 +259,21 @@ export async function deleteTrip(id: string): Promise<void> {
 
 // ── JAMAAH ──────────────────────────────────────────────────────────────────
 
+/**
+ * Kolom yang di-fetch untuk list view — sengaja exclude `photo_data_url`.
+ * Kolom ini bisa berisi base64 ratusan KB per jamaah; tidak dibutuhkan di
+ * list view manapun (TripDetail, ProgressTracker, Dashboard, ExportCenter).
+ * Untuk detail + foto lengkap, pakai `getJamaahWithPhoto(id)`.
+ */
+const JAMAAH_LIST_COLS = [
+  "id", "trip_id", "name", "phone", "birth_date",
+  "passport_number", "passport_expiry", "gender",
+  "needs_review", "booking_code", "payment_status", "created_at",
+].join(",");
+
 export async function listAllAgencyJamaah(): Promise<Jamaah[]> {
   if (isSupabaseConfigured()) {
-    const { data, error } = await supabase!.from("jamaah").select("*");
+    const { data, error } = await supabase!.from("jamaah").select(JAMAAH_LIST_COLS);
     if (error) throw error;
     return (data ?? []).map(jamaahFromRow);
   }
@@ -270,12 +282,23 @@ export async function listAllAgencyJamaah(): Promise<Jamaah[]> {
 
 export async function listJamaah(tripId: string): Promise<Jamaah[]> {
   if (isSupabaseConfigured()) {
-    const { data, error } = await supabase!.from("jamaah").select("*").eq("trip_id", tripId);
+    const { data, error } = await supabase!
+      .from("jamaah")
+      .select(JAMAAH_LIST_COLS)
+      .eq("trip_id", tripId);
     if (error) throw error;
     const list = (data ?? []).map(jamaahFromRow);
-    // Merge into local cache (keep other trips' jamaah)
-    const others = load<Jamaah>(JAMAAH_KEY, []).filter((j) => j.tripId !== tripId);
-    save(JAMAAH_KEY, [...others, ...list]);
+    // Merge into local cache — pertahankan photoDataUrl dari cache supaya
+    // data foto offline tidak hilang saat list view di-refetch.
+    const all = load<Jamaah>(JAMAAH_KEY, []);
+    const prevForTrip = new Map(
+      all.filter((j) => j.tripId === tripId).map((j) => [j.id, j]),
+    );
+    const toCache = list.map((j) => ({
+      ...j,
+      photoDataUrl: prevForTrip.get(j.id)?.photoDataUrl,
+    }));
+    save(JAMAAH_KEY, [...all.filter((j) => j.tripId !== tripId), ...toCache]);
     return list;
   }
   return load<Jamaah>(JAMAAH_KEY, []).filter((j) => j.tripId === tripId);
@@ -441,6 +464,13 @@ export async function getJamaah(id: string): Promise<Jamaah | null> {
   }
   return load<Jamaah>(JAMAAH_KEY, []).find((j) => j.id === id) ?? null;
 }
+
+/**
+ * Seperti `getJamaah` tapi namanya eksplisit: ini SATU-SATUNYA fungsi yang
+ * me-request `photo_data_url` dari Supabase. Pakai hanya di halaman detail
+ * (JamaahProfile) — jangan dipanggil dari list/card view.
+ */
+export const getJamaahWithPhoto = getJamaah;
 
 // ── DOCUMENTS ───────────────────────────────────────────────────────────────
 
