@@ -580,21 +580,22 @@ function fmtIDRShort(n: number): string {
   return new Intl.NumberFormat("id-ID", { style: "currency", currency: "IDR", maximumFractionDigits: 0 }).format(n);
 }
 
-function PaymentAlerts({ trips }: { trips: Trip[] }) {
+function PaymentAlerts({ trips, allJamaah }: { trips: Trip[]; allJamaah: Jamaah[] }) {
   const navigate = useNavigate();
   const [alerts, setAlerts] = useState<UnpaidAlert[]>([]);
   const [loading, setLoading] = useState(true);
   const [collapsed, setCollapsed] = useState(false);
 
   useEffect(() => {
+    // Tunggu jamaah tersedia sebelum mulai (data sudah di-fetch paralel di Dashboard).
+    if (allJamaah.length === 0) { setLoading(false); return; }
     let cancelled = false;
     (async () => {
       setLoading(true);
       try {
-        const [allJamaah, allPayments] = await Promise.all([
-          listAllAgencyJamaah(),
-          listAllAgencyPayments(),
-        ]);
+        // Hanya fetch payments — jamaah sudah diterima sebagai prop, tidak perlu
+        // listAllAgencyJamaah() lagi (menghilangkan double round-trip ke Supabase).
+        const allPayments = await listAllAgencyPayments();
         if (cancelled) return;
         const byJamaah = new Map<string, Payment[]>();
         for (const p of allPayments) {
@@ -626,7 +627,8 @@ function PaymentAlerts({ trips }: { trips: Trip[] }) {
       }
     })();
     return () => { cancelled = true; };
-  }, [trips]);
+  // allJamaah: reference berubah hanya saat mount & manual refresh — aman sebagai dep.
+  }, [trips, allJamaah]);
 
   if (loading) return null;
   if (alerts.length === 0) return null;
@@ -713,6 +715,7 @@ export default function Dashboard() {
   const [deleteTarget, setDeleteTarget] = useState<Trip | null>(null);
   const [tab, setTab] = useState<"all" | "upcoming" | "done">("all");
   const [totalJamaah, setTotalJamaah] = useState(0);
+  const [allJamaah, setAllJamaah] = useState<Jamaah[]>([]);
   const [refreshing, setRefreshing] = useState(false);
 
   const STATUS_LABELS: Record<string, string> = {
@@ -723,15 +726,24 @@ export default function Dashboard() {
     Completed: t.status_completed,
   };
 
-  useEffect(() => { fetchTrips(); }, [fetchTrips]);
-  useEffect(() => { if (!packagesLoaded) refreshPackages(); }, [packagesLoaded, refreshPackages]);
+  // Satu useEffect, semua fetch jalan paralel sejak mount — tidak ada waterfall.
+  // fetchTrips & refreshPackages adalah referensi stabil dari Zustand (tidak perlu
+  // dimasukkan ke deps array — referensinya tidak pernah berubah antar render).
   useEffect(() => {
     let alive = true;
-    listAllAgencyJamaah()
-      .then((rows) => { if (alive) setTotalJamaah(rows.length); })
-      .catch(() => { if (alive) setTotalJamaah(0); });
+    Promise.allSettled([
+      fetchTrips(),
+      refreshPackages(),
+      listAllAgencyJamaah(),
+    ]).then(([, , jamaahResult]) => {
+      if (!alive) return;
+      const rows = jamaahResult.status === "fulfilled" ? jamaahResult.value : [];
+      setTotalJamaah(rows.length);
+      setAllJamaah(rows);
+    });
     return () => { alive = false; };
-  }, [trips.length]);
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
 
   const handleRefresh = async () => {
     if (refreshing) return;
@@ -743,6 +755,7 @@ export default function Dashboard() {
         listAllAgencyJamaah().catch(() => [] as Jamaah[]),
       ]);
       setTotalJamaah(jamaah.length);
+      setAllJamaah(jamaah);
       toast.success("Data dashboard diperbarui dari Supabase.");
     } catch (err) {
       toast.error(`Gagal memuat ulang: ${err instanceof Error ? err.message : String(err)}`);
@@ -961,7 +974,7 @@ export default function Dashboard() {
         </motion.div>
 
         {/* ── Payment alerts H-30 ── */}
-        <PaymentAlerts trips={trips} />
+        <PaymentAlerts trips={trips} allJamaah={allJamaah} />
 
         {/* ── Perlu Perhatian ── */}
         {pendingPackages.length > 0 && (
