@@ -119,6 +119,10 @@ export default defineConfig(({ mode }) => ({
       },
       workbox: {
         globPatterns: ["**/*.{js,css,html,ico,png,svg,woff2,woff,ttf}"],
+        // pdf.worker chunk (~2.1 MB) dikeluarkan dari precache supaya
+        // first-install PWA tidak harus download file besar ini.
+        // Tetap bisa dipakai offline via runtimeCaching CacheFirst di bawah.
+        globIgnores: ["**/pdf.worker*"],
         maximumFileSizeToCacheInBytes: 5 * 1024 * 1024,
         cleanupOutdatedCaches: true,
         skipWaiting: true,
@@ -126,6 +130,19 @@ export default defineConfig(({ mode }) => ({
         navigateFallback: "index.html",
         navigateFallbackDenylist: [/^\/api\//],
         runtimeCaching: [
+          // pdf.worker — CacheFirst, on-demand. Hanya diambil saat user pertama
+          // kali membuka fitur PDF. Setelah itu cached 30 hari (termasuk offline).
+          // maxEntries: 2 cukup untuk menampung 1 versi aktif + 1 versi lama
+          // yang masih mungkin diminta tab yang belum reload.
+          {
+            urlPattern: /\/assets\/pdf\.worker[^/]*\.(mjs|js)(\?.*)?$/,
+            handler: "CacheFirst",
+            options: {
+              cacheName: "pdfjs-worker",
+              expiration: { maxEntries: 2, maxAgeSeconds: 60 * 60 * 24 * 30 },
+              cacheableResponse: { statuses: [0, 200] },
+            },
+          },
           {
             urlPattern: /^https:\/\/api\.frankfurter\.app\/.*/i,
             handler: "NetworkFirst",
