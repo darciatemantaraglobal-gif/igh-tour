@@ -372,6 +372,14 @@ export function PdfLayoutTuner({ config, mode = "private", onChange, onClose }: 
     }
     setTplBusy(true);
     const previousPath = local.customTemplate?.storagePath;
+    // Safety net: jika upload stuck (misal Supabase down), release busy state
+    // otomatis setelah 30 detik supaya tombol tidak terkunci selamanya.
+    const UPLOAD_TIMEOUT_MS = 30_000;
+    let releaseTimeout: ReturnType<typeof setTimeout> | null = setTimeout(() => {
+      setTplBusy(false);
+      if (fileInputRef.current) fileInputRef.current.value = "";
+      toast.error("Upload timeout. Coba lagi atau cek koneksi.");
+    }, UPLOAD_TIMEOUT_MS);
     try {
       const result = await uploadPdfTemplate(file, mode);
       // Replace dulu di config — layout auto-save trigger live preview rebuild.
@@ -393,6 +401,7 @@ export function PdfLayoutTuner({ config, mode = "private", onChange, onClose }: 
     } catch (e) {
       toast.error(`Gagal upload: ${(e as Error).message}`);
     } finally {
+      if (releaseTimeout) { clearTimeout(releaseTimeout); releaseTimeout = null; }
       setTplBusy(false);
       if (fileInputRef.current) fileInputRef.current.value = "";
     }
