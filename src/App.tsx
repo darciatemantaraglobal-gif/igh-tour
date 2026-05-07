@@ -15,6 +15,7 @@ import Auth from "./pages/Auth";
 import PublicCheck from "./pages/PublicCheck";
 import NotFound from "./pages/NotFound.tsx";
 
+const BrosurPreview = lazy(() => import("./pages/BrosurPreview"));
 const Calculator    = lazy(() => import("./pages/Calculator"));
 const Packages      = lazy(() => import("./pages/Packages"));
 const PackageDetail = lazy(() => import("./pages/PackageDetail"));
@@ -153,6 +154,7 @@ function AnimatedRoutes() {
         <Route path="/bootstrap" element={<Auth />} />
         <Route path="/cek" element={<PublicCheck />} />
         <Route path="/cek/:code" element={<PublicCheck />} />
+        <Route path="/brosur" element={<BrosurPreview />} />
 
         <Route path="/" element={<RequireAuth><Index /></RequireAuth>} />
         <Route path="/calculator" element={<RequireAuth><DashboardLayout><Calculator /></DashboardLayout></RequireAuth>} />
