@@ -562,7 +562,7 @@ export function computeGroupMatrix(input: GroupMatrixInput): GroupMatrixQuote {
     const pax = Math.max(1, tier.min); // konservatif: harga buat skenario pax minimum
     for (const room of roomTypes) {
       const sharing = ROOM_SHARING[room];
-      const rooms = Math.ceil(pax / sharing);
+      const rooms = pax / sharing; // proporsional, tanpa pembulatan agar harga turun konsisten
       // Hotel total grup utk room type ini = sum(harga 1 kamar × jumlah kamar)
       const hotelTotalIDR = hotelBreakdown.reduce(
         (sum, h) => sum + h.ratesPerRoomIDR[room] * rooms,
