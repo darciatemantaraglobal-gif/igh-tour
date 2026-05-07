@@ -343,9 +343,6 @@ export default function BrosurPreview() {
           </div>
         </div>
 
-        {/* ── Divider ── */}
-        <div style={{ height: 1.5, background: "linear-gradient(to right, transparent, #f97316, transparent)", marginBottom: 14, borderRadius: 1 }} />
-
         {/* ── Footer contacts ── */}
         <div
           style={{
