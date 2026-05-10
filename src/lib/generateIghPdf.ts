@@ -641,30 +641,14 @@ export async function buildIghPdf(data: IghPdfData, layout?: Partial<IghLayoutCo
 
   const listFont = fontFor("checklist", "semiBold");
   const firstBaselinePxResolved = cfg.checklist.firstBaselinePx + cfg.checklist.yOffsetPx;
-  // Template cetak punya 5 garis pembatas pre-printed (01..05) — mask tetap 5.
-  // Item ke-6 dan seterusnya di-render di ruang kosong antara baris 5 dan footer,
-  // dan dijaga tidak melebihi footer oleh `footerCutoffPx`.
-  const MASK_ROWS = 5;
   // Izinkan hingga 10 item; batas nyata ditentukan oleh `footerCutoffPx` di bawah
   // sehingga tidak ada item yang overlap dengan footer, apapun mode-nya.
   const MAX_LIST_ROWS = 10;
   // Batas bawah (template-px) agar teks checklist tidak menembus area footer.
   // Margin 10px dari garis footer memberikan breathing room visual.
   const footerCutoffPx = cfg.footer.topPx - 10;
-  // ROW_BASELINES masih dipakai utk mask divider — generate berdasar config
-  // rowSpacingPx (visual sekat asli template di interval ini, bukan dependent
-  // ke berapa baris item beneran). Mask cuma sebatas LINE under tiap "row slot",
-  // jadi cocok di posisi template asli.
-  const ROW_BASELINES_FOR_MASK = Array.from({ length: MASK_ROWS }, (_, i) =>
-    cfg.checklist.firstBaselinePx + i * cfg.checklist.rowSpacingPx + cfg.checklist.yOffsetPx,
-  );
   const includedItems = splitOverrideOrUse(cfg.checklist.includedText, data.included);
   const excludedItems = splitOverrideOrUse(cfg.checklist.excludedText, data.excluded);
-  // Mask garis pembatas horizontal yang ter-print di template (under tiap row).
-  // Lines ada ~5px di bawah baseline, span full column width. Mask pakai white
-  // rect supaya teks Include/Exclude tampil bersih tanpa sekat garis.
-  maskChecklistDividers(page, cfg.checklist.leftXPx, ROW_BASELINES_FOR_MASK);
-  maskChecklistDividers(page, cfg.checklist.rightXPx, ROW_BASELINES_FOR_MASK);
   const bulletSymbol = (cfg.checklist.listBullet ?? "•").trim();
   drawList(
     page, includedItems,
@@ -684,21 +668,6 @@ export async function buildIghPdf(data: IghPdfData, layout?: Partial<IghLayoutCo
   return pdf.save();
 }
 
-/** Tutup garis horizontal yang sudah pre-printed di template untuk satu kolom
- *  checklist. Mask cuma sebatas LINE — tidak menutupi digit "01..05" di kiri,
- *  jadi penomoran tetap terlihat. */
-function maskChecklistDividers(page: PDFPage, centerXPx: number, baselinesPx: number[]) {
-  const COL_WIDTH_PX = 235;
-  const DIGIT_RESERVE_PX = 26;          // ruang aman untuk "01..05"
-  const LINE_OFFSET_PX = 4;             // line ~4px di bawah baseline teks
-  const MASK_HEIGHT_PX = 6;
-  const leftEdgePx = centerXPx - COL_WIDTH_PX / 2 + DIGIT_RESERVE_PX;
-  const widthPx = COL_WIDTH_PX - DIGIT_RESERVE_PX - 2;
-  for (const baselinePx of baselinesPx) {
-    const r = pxRect(leftEdgePx, baselinePx + LINE_OFFSET_PX, widthPx, MASK_HEIGHT_PX);
-    page.drawRectangle({ x: r.x, y: r.y, width: r.width, height: r.height, color: WHITE, borderWidth: 0 });
-  }
-}
 
 /**
  * Render WhatsApp icon + nomor admin di footer, dengan link annotation
