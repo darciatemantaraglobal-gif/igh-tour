@@ -66,8 +66,10 @@ async function fetchFromCurrencyApi(): Promise<Rates> {
 
 // Fallback: Frankfurter (ECB rates, weekday-only)
 async function fetchFromFrankfurter(): Promise<Rates> {
-  const isDev = typeof window !== "undefined" &&
-    (window.location.hostname === "localhost" || window.location.port !== "");
+  // Use the Vite proxy path when running in dev server (any non-production build).
+  // Checking import.meta.env.DEV is reliable across all hosting environments
+  // (localhost, Replit, Codespaces, etc.) unlike port/hostname sniffing.
+  const isDev = typeof import.meta !== "undefined" && import.meta.env?.DEV === true;
   const url = isDev
     ? "/api/frankfurter/latest?from=IDR&to=USD,SAR"
     : "https://api.frankfurter.app/latest?from=IDR&to=USD,SAR";

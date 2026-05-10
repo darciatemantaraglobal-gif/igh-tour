@@ -70,6 +70,8 @@ create table if not exists public.trips (
   created_at    timestamptz not null default now()
 );
 alter table public.trips add column if not exists agency_id uuid references public.agencies(id) on delete cascade;
+alter table public.trips add column if not exists quota_pax int;
+alter table public.trips add column if not exists price_per_pax numeric;
 create index if not exists trips_agency_idx on public.trips(agency_id);
 
 create table if not exists public.jamaah (
@@ -88,6 +90,7 @@ create table if not exists public.jamaah (
 alter table public.jamaah add column if not exists agency_id uuid references public.agencies(id) on delete cascade;
 alter table public.jamaah add column if not exists needs_review boolean not null default false;
 alter table public.jamaah add column if not exists passport_expiry text;
+alter table public.jamaah add column if not exists booking_code text;
 alter table public.jamaah add column if not exists payment_status text not null default 'Belum Lunas';
 do $$
 begin
@@ -189,6 +192,28 @@ create table if not exists public.pdf_templates (
 alter table public.pdf_templates add column if not exists agency_id uuid references public.agencies(id) on delete cascade;
 create index if not exists pdf_templates_agency_idx on public.pdf_templates(agency_id);
 
+-- ── PAYMENTS ─────────────────────────────────────────────────────────────────
+-- Riwayat pembayaran per-jamaah. Type: dp | installment | final | refund | other.
+-- proof_url = storage path di bucket payment-proofs (bukan public URL).
+
+create table if not exists public.payments (
+  id          text primary key,
+  agency_id   uuid not null references public.agencies(id) on delete cascade,
+  jamaah_id   text not null references public.jamaah(id) on delete cascade,
+  trip_id     text references public.trips(id) on delete set null,
+  type        text not null default 'other' check (type in ('dp','installment','final','refund','other')),
+  amount      numeric not null default 0,
+  method      text not null default '',
+  paid_at     text not null default '',
+  notes       text not null default '',
+  proof_url   text,
+  created_at  timestamptz not null default now()
+);
+alter table public.payments add column if not exists agency_id uuid references public.agencies(id) on delete cascade;
+create index if not exists payments_jamaah_idx on public.payments(jamaah_id);
+create index if not exists payments_trip_idx   on public.payments(trip_id);
+create index if not exists payments_agency_idx on public.payments(agency_id);
+
 -- Audit logs (placeholder buat fitur #5 nanti)
 create table if not exists public.audit_logs (
   id          bigserial primary key,
@@ -215,6 +240,7 @@ alter table public.package_calculations  enable row level security;
 alter table public.notes                 enable row level security;
 alter table public.pdf_templates         enable row level security;
 alter table public.pdf_layout_presets    enable row level security;
+alter table public.payments              enable row level security;
 alter table public.audit_logs            enable row level security;
 
 -- ── POLICY HELPERS ──────────────────────────────────────────────────────────
@@ -258,7 +284,7 @@ declare t text;
 begin
   for t in select unnest(array[
     'trips','jamaah','jamaah_docs','packages',
-    'package_calculations','notes','pdf_templates','pdf_layout_presets'
+    'package_calculations','notes','pdf_templates','pdf_layout_presets','payments'
   ]) loop
     execute format($f$
       create policy "%1$s_select" on public.%1$I
@@ -281,9 +307,10 @@ create policy "audit_logs_select" on public.audit_logs
 -- ── STORAGE BUCKETS ─────────────────────────────────────────────────────────
 insert into storage.buckets (id, name, public)
 values
-  ('jamaah-photos', 'jamaah-photos', true),
-  ('jamaah-docs',   'jamaah-docs',   true),
-  ('pdf-templates', 'pdf-templates', true)
+  ('jamaah-photos',   'jamaah-photos',   true),
+  ('jamaah-docs',     'jamaah-docs',     true),
+  ('pdf-templates',   'pdf-templates',   true),
+  ('payment-proofs',  'payment-proofs',  false)
 on conflict (id) do nothing;
 
 -- Drop policy lama
@@ -302,28 +329,28 @@ end$$;
 
 create policy "igh_storage_select" on storage.objects
   for select using (
-    bucket_id in ('jamaah-photos','jamaah-docs','pdf-templates')
+    bucket_id in ('jamaah-photos','jamaah-docs','pdf-templates','payment-proofs')
     and public.is_member(((storage.foldername(name))[1])::uuid)
   );
 
 create policy "igh_storage_insert" on storage.objects
   for insert with check (
-    bucket_id in ('jamaah-photos','jamaah-docs','pdf-templates')
+    bucket_id in ('jamaah-photos','jamaah-docs','pdf-templates','payment-proofs')
     and public.is_member(((storage.foldername(name))[1])::uuid)
   );
 
 create policy "igh_storage_update" on storage.objects
   for update using (
-    bucket_id in ('jamaah-photos','jamaah-docs','pdf-templates')
+    bucket_id in ('jamaah-photos','jamaah-docs','pdf-templates','payment-proofs')
     and public.is_member(((storage.foldername(name))[1])::uuid)
   ) with check (
-    bucket_id in ('jamaah-photos','jamaah-docs','pdf-templates')
+    bucket_id in ('jamaah-photos','jamaah-docs','pdf-templates','payment-proofs')
     and public.is_member(((storage.foldername(name))[1])::uuid)
   );
 
 create policy "igh_storage_delete" on storage.objects
   for delete using (
-    bucket_id in ('jamaah-photos','jamaah-docs','pdf-templates')
+    bucket_id in ('jamaah-photos','jamaah-docs','pdf-templates','payment-proofs')
     and public.is_member(((storage.foldername(name))[1])::uuid)
   );
 
@@ -380,7 +407,7 @@ declare t text;
 begin
   for t in select unnest(array[
     'trips','jamaah','jamaah_docs','packages',
-    'package_calculations','notes','pdf_templates','pdf_layout_presets'
+    'package_calculations','notes','pdf_templates','pdf_layout_presets','payments'
   ]) loop
     begin
       execute format('alter publication supabase_realtime add table public.%I', t);

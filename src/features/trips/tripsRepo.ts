@@ -253,8 +253,12 @@ export async function deleteTrip(id: string): Promise<void> {
     }
   }
   // Server (or local-only mode) confirmed → bersihin cache lokal.
+  const deletedJamaahIds = new Set(
+    load<Jamaah>(JAMAAH_KEY, []).filter((j) => j.tripId === id).map((j) => j.id),
+  );
   save(TRIPS_KEY, load<Trip>(TRIPS_KEY, []).filter((t) => t.id !== id));
   save(JAMAAH_KEY, load<Jamaah>(JAMAAH_KEY, []).filter((j) => j.tripId !== id));
+  save(DOCS_KEY, load<JamaahDoc>(DOCS_KEY, []).filter((d) => !deletedJamaahIds.has(d.jamaahId)));
 }
 
 // ── JAMAAH ──────────────────────────────────────────────────────────────────
