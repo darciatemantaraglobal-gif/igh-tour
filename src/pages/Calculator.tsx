@@ -1008,6 +1008,7 @@ export default function Calculator() {
         status: "Calculated",
         emoji,
         departureDate: parsed.start || undefined,
+        returnDate: parsed.end || undefined,
         airline,
         hotelLevel: hotelLevel as PackageDraft["hotelLevel"],
         facilities: facilities.length ? facilities : undefined,

@@ -45,6 +45,7 @@ const empty: PackageDraft = {
   emoji: "✈️",
   coverImage: undefined,
   departureDate: "",
+  returnDate: "",
   airline: "",
   hotelLevel: undefined,
   notes: "",
@@ -267,32 +268,59 @@ export function PackageFormDialog({ open, onOpenChange, initial, onSubmit }: Pro
                   <div className="flex-1 h-px bg-[hsl(var(--border))]" />
                 </div>
 
-                {/* Row 1: Nama + Tanggal Berangkat */}
+                {/* Row 1: Nama Paket */}
+                <div className="space-y-1.5">
+                  <p className={lbl}>Nama Paket <span className="text-red-400 normal-case font-bold">*</span></p>
+                  <Input
+                    placeholder="Umrah Ramadhan"
+                    value={draft.name}
+                    onChange={(e) => { set("name", e.target.value); setErrors(p => ({ ...p, name: undefined })); }}
+                    className={inp + (errors.name ? " border-red-400" : "")}
+                    autoFocus
+                  />
+                  {errors.name && <p className="text-[10px] text-red-500">{errors.name}</p>}
+                </div>
+
+                {/* Row 2: Tgl. Berangkat + Tgl. Pulang */}
                 <div className="grid grid-cols-1 sm:grid-cols-2 gap-2.5 md:gap-3">
                   <div className="space-y-1.5">
-                    <p className={lbl}>Nama Paket <span className="text-red-400 normal-case font-bold">*</span></p>
-                    <Input
-                      placeholder="Umrah Ramadhan"
-                      value={draft.name}
-                      onChange={(e) => { set("name", e.target.value); setErrors(p => ({ ...p, name: undefined })); }}
-                      className={inp + (errors.name ? " border-red-400" : "")}
-                      autoFocus
-                    />
-                    {errors.name && <p className="text-[10px] text-red-500">{errors.name}</p>}
-                  </div>
-                  <div className="space-y-1.5">
-                    <p className={lbl}>Tgl. Berangkat <span className="text-red-400 normal-case font-bold">*</span></p>
+                    <p className={lbl}>Tgl. Berangkat</p>
                     <Input
                       type="date"
                       value={draft.departureDate ?? ""}
-                      onChange={(e) => { set("departureDate", e.target.value); setErrors(p => ({ ...p, departureDate: undefined })); }}
+                      onChange={(e) => {
+                        const dep = e.target.value;
+                        set("departureDate", dep);
+                        setErrors(p => ({ ...p, departureDate: undefined }));
+                        if (draft.returnDate && dep && draft.returnDate < dep) {
+                          set("returnDate", "");
+                        }
+                      }}
                       className={inp + (errors.departureDate ? " border-red-400" : "")}
                     />
                     {errors.departureDate && <p className="text-[10px] text-red-500">{errors.departureDate}</p>}
                   </div>
+                  <div className="space-y-1.5">
+                    <p className={lbl}>
+                      Tgl. Pulang
+                      {draft.departureDate && draft.returnDate && draft.returnDate >= draft.departureDate && (
+                        <span className="ml-1.5 text-[9px] text-orange-500 normal-case font-semibold">
+                          · {Math.max(1, Math.round((new Date(draft.returnDate + "T00:00:00").getTime() - new Date(draft.departureDate + "T00:00:00").getTime()) / 86400000) + 1)} Hari
+                        </span>
+                      )}
+                    </p>
+                    <Input
+                      type="date"
+                      value={draft.returnDate ?? ""}
+                      min={draft.departureDate ?? undefined}
+                      disabled={!draft.departureDate}
+                      onChange={(e) => { set("returnDate", e.target.value); }}
+                      className={inp + " disabled:bg-slate-50 disabled:text-muted-foreground disabled:cursor-not-allowed"}
+                    />
+                  </div>
                 </div>
 
-                {/* Row 2: Destinasi + Durasi */}
+                {/* Row 3: Destinasi + Durasi */}
                 <div className="grid grid-cols-1 sm:grid-cols-2 gap-2.5 md:gap-3">
                   <div className="space-y-1.5">
                     <p className={lbl}>Destinasi <span className="text-red-400 normal-case font-bold">*</span></p>
@@ -322,7 +350,7 @@ export function PackageFormDialog({ open, onOpenChange, initial, onSubmit }: Pro
                   </div>
                 </div>
 
-                {/* Row 3: Status + Kuota */}
+                {/* Row 4: Status + Kuota */}
                 <div className="grid grid-cols-1 sm:grid-cols-2 gap-2.5 md:gap-3">
                   <div className="space-y-1.5">
                     <p className={lbl}>Status</p>
@@ -346,7 +374,7 @@ export function PackageFormDialog({ open, onOpenChange, initial, onSubmit }: Pro
                   </div>
                 </div>
 
-                {/* Row 4: Hotel + Maskapai */}
+                {/* Row 5: Hotel + Maskapai */}
                 <div className="grid grid-cols-1 sm:grid-cols-2 gap-2.5 md:gap-3">
                   <div className="space-y-1.5">
                     <p className={lbl}>Level Hotel <span className="text-red-400 normal-case font-bold">*</span></p>
