@@ -1,0 +1,25 @@
+Lakukan audit total terhadap seluruh sistem website ini seperti seorang principal engineer kelas dunia yang sedang menyelamatkan production SaaS bernilai miliaran rupiah. Fokus utama: cari dan perbaiki semua bottleneck, bug tersembunyi, arsitektur buruk, sinkronisasi yang gagal, flow yang putus, query lambat, memory leak, race condition, state inconsistency, rendering bermasalah, konfigurasi salah, dan semua hal yang menghambat performa, stabilitas, sinkronisasi data, dan pengalaman user di frontend, Supabase, serta deployment Vercel. Jangan hanya memperbaiki error yang terlihat — telusuri akar masalah sistemik dan bersihkan seluruh technical debt yang berhubungan.
+
+Audit frontend React/Vite/TypeScript secara menyeluruh: cek rerender berlebihan, state management yang tidak sinkron, dependency useEffect yang salah, stale state, infinite loop, hydration issue, race condition async, memory leak, unused state, duplicate fetch, fetch tanpa cancellation, optimistic update palsu, cache inconsistency, component terlalu besar, lazy loading yang tidak optimal, asset berat, image/font blocking, error boundary yang hilang, dan seluruh flow antar halaman. Pastikan semua fitur yang seharusnya saling terhubung benar-benar sinkron secara real-time dan konsisten: kalkulator paket, save Paket Trip, preview PDF, data hotel, include/exclude, pricing, itinerary, auth user, dashboard, dan seluruh CRUD. Jangan ada lagi kasus data terlihat tersimpan tapi hilang setelah refresh, data stale, mismatch field, atau state UI berbeda dengan database.
+
+Audit Supabase secara mendalam: schema tabel, foreign key, relasi, indexing, query lambat, field mismatch, migration berantakan, schema drift antara frontend dan database, RLS policy, auth session, select/insert/update/delete permission, realtime subscription, dan seluruh API interaction. Pastikan semua tabel memiliki struktur konsisten, tidak ada kolom orphan/legacy yang masih dipakai frontend, tidak ada referensi field yang sudah tidak ada, dan semua query menggunakan index yang tepat. Cek apakah ada N+1 query, fetch berulang, payload terlalu besar, atau query yang seharusnya dibatasi/select field tertentu. Pastikan seluruh migration aman dan tidak menyebabkan schema cache error lagi. Bersihkan field duplikat, penamaan tidak konsisten, serta semua logic yang membuat data sync gagal.
+
+Audit Vercel deployment dan build pipeline: cek build configuration, environment variables, rewrite/redirect SPA, caching issue, stale deployment, hydration mismatch production-only, bundle size, tree-shaking, source map, edge/runtime mismatch, environment leakage, dan masalah yang hanya muncul setelah deploy production. Pastikan semua env dipasang dengan benar di Vercel, tidak ada secret bocor ke browser, tidak ada penggunaan `VITE_*` untuk secret sensitif, dan tidak ada konfigurasi lama dari Replit yang mengganggu production deployment. Pastikan refresh halaman SPA tidak 404, PDF generation stabil di production, dan tidak ada cache lama yang menyebabkan UI aneh setelah update deploy.
+
+Audit seluruh proses export PDF dan rendering visual: pastikan semua data tampil lengkap, tidak ada limit tersembunyi, tidak ada elemen kepotong, background tidak rusak, layout responsive terhadap jumlah data panjang, pagination otomatis berjalan, dan hasil PDF konsisten antara preview dan file final. Bersihkan seluruh CSS atau style legacy yang menyebabkan artifact putih, overflow tersembunyi, clipping, scaling rusak, atau layout pecah.
+
+Audit performa secara agresif: identifikasi bottleneck render, bundle terbesar, komponen berat, query lambat, asset tidak terkompres, duplicate dependency, dead code, memory leak, dan network request berlebihan. Refactor jika perlu agar aplikasi lebih modular, maintainable, dan scalable. Hapus code mati, dependency tidak terpakai, log debug production, dan seluruh konfigurasi legacy yang sudah tidak relevan. Pastikan lint/build/typecheck clean tanpa warning penting.
+
+Lakukan pengujian end-to-end seluruh flow utama aplikasi: login/auth, kalkulator paket, save Paket Trip, edit paket, fetch list, reload browser, generate PDF, export/download, dan seluruh sinkronisasi data antar halaman. Pastikan semua fitur saling terhubung sempurna tanpa manual refresh atau state aneh. Jika menemukan pola bug serupa di tempat lain, perbaiki semuanya sekaligus meskipun belum dilaporkan user.
+
+Setelah seluruh audit dan perbaikan selesai, berikan laporan lengkap berisi:
+- root cause semua masalah utama
+- bottleneck yang ditemukan
+- file yang diubah
+- migration SQL yang dibuat
+- query yang dioptimasi
+- bagian yang direfactor
+- peningkatan performa/stabilitas
+- fitur yang sebelumnya tidak sinkron dan sekarang sudah sinkron
+- risiko/manual check yang masih perlu diuji
+- rekomendasi best practice jangka panjang agar project tetap stabil dan scalable

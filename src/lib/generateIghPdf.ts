@@ -641,12 +641,16 @@ export async function buildIghPdf(data: IghPdfData, layout?: Partial<IghLayoutCo
 
   const listFont = fontFor("checklist", "semiBold");
   const firstBaselinePxResolved = cfg.checklist.firstBaselinePx + cfg.checklist.yOffsetPx;
-  // Template cetak selalu punya 5 garis pembatas (01..05) — mask tetap 5.
-  // Tapi private template punya ruang lebih ke footer (715+5×28=855px < 891px footer)
-  // sehingga bisa tampilkan 6 item. Group template lebih padat (775+5×26=905px > 891px)
-  // sehingga tetap dibatasi 5.
+  // Template cetak punya 5 garis pembatas pre-printed (01..05) — mask tetap 5.
+  // Item ke-6 dan seterusnya di-render di ruang kosong antara baris 5 dan footer,
+  // dan dijaga tidak melebihi footer oleh `footerCutoffPx`.
   const MASK_ROWS = 5;
-  const MAX_LIST_ROWS = data.mode === "group" ? 5 : 6;
+  // Izinkan hingga 10 item; batas nyata ditentukan oleh `footerCutoffPx` di bawah
+  // sehingga tidak ada item yang overlap dengan footer, apapun mode-nya.
+  const MAX_LIST_ROWS = 10;
+  // Batas bawah (template-px) agar teks checklist tidak menembus area footer.
+  // Margin 10px dari garis footer memberikan breathing room visual.
+  const footerCutoffPx = cfg.footer.topPx - 10;
   // ROW_BASELINES masih dipakai utk mask divider — generate berdasar config
   // rowSpacingPx (visual sekat asli template di interval ini, bukan dependent
   // ke berapa baris item beneran). Mask cuma sebatas LINE under tiap "row slot",
@@ -667,12 +671,14 @@ export async function buildIghPdf(data: IghPdfData, layout?: Partial<IghLayoutCo
     firstBaselinePxResolved, cfg.checklist.rowSpacingPx, MAX_LIST_ROWS,
     cfg.checklist.leftXPx, listFont, cfg.checklist.size,
     cfg.checklist.sudahTermasukAlign ?? "center", bulletSymbol,
+    footerCutoffPx,
   );
   drawList(
     page, excludedItems,
     firstBaselinePxResolved, cfg.checklist.rowSpacingPx, MAX_LIST_ROWS,
     cfg.checklist.rightXPx, listFont, cfg.checklist.size,
     cfg.checklist.belumTermasukAlign ?? "center", bulletSymbol,
+    footerCutoffPx,
   );
 
   return pdf.save();
@@ -841,6 +847,9 @@ function drawList(
   baseSize = 10,
   align: "left" | "center" | "right" = "center",
   bullet = "•",
+  /** Batas bawah (template-px). Baris yang baseline-nya ≥ nilai ini tidak
+   *  di-render supaya tidak overlap dengan footer template. */
+  maxBaselinePx?: number,
 ) {
   const cleaned = items.map((s) => s.trim()).filter(Boolean).slice(0, maxRows);
   // Width budget per row ~ 235px (kolom asli template). Padding 8px disisain
@@ -885,6 +894,8 @@ function drawList(
     const textXPt = blockLeftPt + prefixW;
 
     for (let li = 0; li < wrappedBody.length; li++) {
+      // Hentikan rendering kalau baseline sudah melewati batas footer.
+      if (maxBaselinePx !== undefined && cursorBaselinePx >= maxBaselinePx) return;
       const y = PAGE_H - cursorBaselinePx * SCALE;
       if (li === 0 && prefix) {
         // Baris pertama: bullet + teks. Render terpisah supaya bullet stay
