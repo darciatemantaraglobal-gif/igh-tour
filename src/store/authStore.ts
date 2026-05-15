@@ -102,11 +102,25 @@ async function loadCurrentUser(): Promise<AuthUser | null> {
   let agencyName = "Agency";
   let role: UserRole = "staff";
 
-  const { data: joined, error: joinErr } = await supabase
-    .from("agency_members")
-    .select("agency_id, role, agencies(id, name)")
-    .eq("user_id", session.user.id)
-    .maybeSingle();
+  // Jalankan membership join + profile lookup secara paralel untuk
+  // menghemat satu round-trip (~200-400 ms) di setiap init / auth-change.
+  const [
+    { data: joined, error: joinErr },
+    profileData,
+  ] = await Promise.all([
+    supabase
+      .from("agency_members")
+      .select("agency_id, role, agencies(id, name)")
+      .eq("user_id", session.user.id)
+      .maybeSingle(),
+    supabase
+      .from("profiles")
+      .select("full_name")
+      .eq("id", session.user.id)
+      .maybeSingle()
+      .then(({ data }) => data)
+      .catch(() => null), // profiles table mungkin belum ada — graceful fallback
+  ]);
 
   if (!joinErr && joined) {
     agencyId = (joined as { agency_id: string }).agency_id;
@@ -115,7 +129,7 @@ async function loadCurrentUser(): Promise<AuthUser | null> {
     const agencyRow = Array.isArray(a) ? a[0] : a;
     if (agencyRow?.name) agencyName = agencyRow.name;
   } else {
-    // Fallback ke 2-query path
+    // Fallback ke 2-query path (hanya untuk agency/role — profile sudah di-fetch paralel)
     const { data: membership } = await supabase
       .from("agency_members").select("agency_id, role").eq("user_id", session.user.id).maybeSingle();
     if (!membership) return null;
@@ -134,14 +148,8 @@ async function loadCurrentUser(): Promise<AuthUser | null> {
   //   3. email prefix sbg fallback terakhir
   const meta = (session.user.user_metadata ?? {}) as { display_name?: string };
   let displayName = meta.display_name?.trim() || session.user.email?.split("@")[0] || "User";
-  try {
-    const { data: profile } = await supabase
-      .from("profiles").select("full_name").eq("id", session.user.id).maybeSingle();
-    const fn = (profile as { full_name?: string } | null)?.full_name?.trim();
-    if (fn) displayName = fn;
-  } catch {
-    // Profile table mungkin belum di-migrate — fallback ke metadata aja.
-  }
+  const fn = (profileData as { full_name?: string } | null)?.full_name?.trim();
+  if (fn) displayName = fn;
   return {
     id: session.user.id,
     email: session.user.email ?? "",

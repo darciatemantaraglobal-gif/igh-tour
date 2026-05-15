@@ -28,6 +28,16 @@ export interface Package {
 
 export type PackageDraft = Omit<Package, "id" | "createdAt" | "updatedAt">;
 
+/**
+ * Kolom yang di-fetch untuk list & detail view — exclude `agency_id` dan field
+ * internal DB yang tidak dibutuhkan di klien.
+ */
+const PACKAGES_COLS = [
+  "id", "name", "destination", "people", "days", "hpp", "total_idr",
+  "status", "emoji", "cover_image", "departure_date", "return_date",
+  "airline", "hotel_level", "notes", "facilities", "created_at", "updated_at",
+].join(",");
+
 // Source of truth = Supabase. Tapi kita tetap simpan write-through cache di
 // localStorage per-agency, supaya:
 //   1) Refresh page = data tetap muncul instant (gak nunggu round-trip Supabase).
@@ -83,7 +93,7 @@ const toRow = (p: Package, agencyId?: string) => ({
 export async function listPackages(): Promise<Package[]> {
   if (isSupabaseConfigured()) {
     try {
-      const { data, error } = await supabase!.from("packages").select("*").order("created_at", { ascending: false });
+      const { data, error } = await supabase!.from("packages").select(PACKAGES_COLS).order("created_at", { ascending: false });
       if (error) throw error;
       const items = (data ?? []).map(fromRow);
       saveStore(items);
@@ -104,7 +114,7 @@ export async function listPackages(): Promise<Package[]> {
 
 export async function getPackage(id: string): Promise<Package | null> {
   if (isSupabaseConfigured()) {
-    const { data, error } = await supabase!.from("packages").select("*").eq("id", id).maybeSingle();
+    const { data, error } = await supabase!.from("packages").select(PACKAGES_COLS).eq("id", id).maybeSingle();
     if (error) throw error;
     return data ? fromRow(data) : null;
   }

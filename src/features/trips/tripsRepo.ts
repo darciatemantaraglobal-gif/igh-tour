@@ -185,10 +185,22 @@ const docToRow = (d: JamaahDoc, agencyId?: string) => ({
 
 // ── TRIPS ───────────────────────────────────────────────────────────────────
 
+/**
+ * Kolom yang di-fetch untuk list view trips — exclude `agency_id` dan field
+ * DB internal yang tidak dibutuhkan di klien.
+ */
+const TRIPS_LIST_COLS = [
+  "id", "name", "destination", "start_date", "end_date",
+  "emoji", "cover_image", "quota_pax", "price_per_pax", "created_at",
+].join(",");
+
 export async function listTrips(): Promise<Trip[]> {
   if (isSupabaseConfigured()) {
     try {
-      const { data, error } = await supabase!.from("trips").select("*").order("created_at", { ascending: false });
+      const { data, error } = await supabase!
+        .from("trips")
+        .select(TRIPS_LIST_COLS)
+        .order("created_at", { ascending: false });
       if (error) throw error;
       const trips = (data ?? []).map(tripFromRow);
       save(TRIPS_KEY, trips);
@@ -277,7 +289,10 @@ const JAMAAH_LIST_COLS = [
 
 export async function listAllAgencyJamaah(): Promise<Jamaah[]> {
   if (isSupabaseConfigured()) {
-    const { data, error } = await supabase!.from("jamaah").select(JAMAAH_LIST_COLS);
+    const { data, error } = await supabase!
+      .from("jamaah")
+      .select(JAMAAH_LIST_COLS)
+      .order("created_at", { ascending: true });
     if (error) throw error;
     return (data ?? []).map(jamaahFromRow);
   }
@@ -289,7 +304,8 @@ export async function listJamaah(tripId: string): Promise<Jamaah[]> {
     const { data, error } = await supabase!
       .from("jamaah")
       .select(JAMAAH_LIST_COLS)
-      .eq("trip_id", tripId);
+      .eq("trip_id", tripId)
+      .order("created_at", { ascending: true });
     if (error) throw error;
     const list = (data ?? []).map(jamaahFromRow);
     // Merge into local cache — pertahankan photoDataUrl dari cache supaya

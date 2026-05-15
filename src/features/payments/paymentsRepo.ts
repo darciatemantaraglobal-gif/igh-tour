@@ -54,6 +54,14 @@ export const PAYMENT_TYPE_LABEL: Record<PaymentType, string> = {
   other: "Lainnya",
 };
 
+/**
+ * Kolom eksplisit — exclude `agency_id` yang tidak dibutuhkan di klien.
+ */
+const PAYMENT_COLS = [
+  "id", "jamaah_id", "trip_id", "type", "amount",
+  "method", "paid_at", "notes", "proof_url", "created_at",
+].join(",");
+
 const fromRow = (r: Record<string, unknown>): Payment => ({
   id: String(r.id),
   jamaahId: String(r.jamaah_id),
@@ -84,7 +92,10 @@ const toRow = (p: Payment, agencyId?: string) => ({
 export async function listPaymentsByJamaah(jamaahId: string): Promise<Payment[]> {
   if (!isSupabaseConfigured()) return [];
   const { data, error } = await supabase!
-    .from("payments").select("*").eq("jamaah_id", jamaahId).order("paid_at", { ascending: false });
+    .from("payments")
+    .select(PAYMENT_COLS)
+    .eq("jamaah_id", jamaahId)
+    .order("paid_at", { ascending: false });
   if (error) throw error;
   return (data ?? []).map(fromRow);
 }
@@ -92,7 +103,10 @@ export async function listPaymentsByJamaah(jamaahId: string): Promise<Payment[]>
 export async function listPaymentsByTrip(tripId: string): Promise<Payment[]> {
   if (!isSupabaseConfigured()) return [];
   const { data, error } = await supabase!
-    .from("payments").select("*").eq("trip_id", tripId);
+    .from("payments")
+    .select(PAYMENT_COLS)
+    .eq("trip_id", tripId)
+    .order("paid_at", { ascending: false });
   if (error) throw error;
   return (data ?? []).map(fromRow);
 }
@@ -132,7 +146,10 @@ export async function deletePayment(id: string): Promise<void> {
 
 export async function listAllAgencyPayments(): Promise<Payment[]> {
   if (!isSupabaseConfigured()) return [];
-  const { data, error } = await supabase!.from("payments").select("*");
+  const { data, error } = await supabase!
+    .from("payments")
+    .select(PAYMENT_COLS)
+    .order("paid_at", { ascending: false });
   if (error) throw error;
   return (data ?? []).map(fromRow);
 }
