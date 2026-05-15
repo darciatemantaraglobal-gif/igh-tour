@@ -28,7 +28,9 @@ import {
 } from "@/lib/ighPdfConfig";
 import {
   deletePdfLayoutPreset,
+  pullActiveLayoutConfig,
   pullPdfLayoutPresets,
+  pushActiveLayoutConfig,
   upsertPdfLayoutPreset,
 } from "@/lib/cloudSync";
 import { onPdfPresetsChanged } from "@/lib/supabaseRealtime";
@@ -208,6 +210,7 @@ export function PdfLayoutTuner({ config, mode = "private", onChange, onClose }: 
   }, [mode]);
 
   // Debounce upstream notify by 350ms biar slider drag/typing ga lag.
+  // Cloud push pakai debounce 2s (lebih hemat request Supabase).
   useEffect(() => {
     const t = window.setTimeout(() => {
       onChange(local);
@@ -216,16 +219,33 @@ export function PdfLayoutTuner({ config, mode = "private", onChange, onClose }: 
       // gak ngira ini perubahan eksternal & loop re-set local.
       lastSeenConfigRef.current = local;
     }, 350);
-    return () => window.clearTimeout(t);
+    const tCloud = window.setTimeout(() => {
+      void pushActiveLayoutConfig(local, mode);
+    }, 2000);
+    return () => {
+      window.clearTimeout(t);
+      window.clearTimeout(tCloud);
+    };
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [local]);
 
   // Initial pull dari cloud + subscribe realtime → kalau device lain mutasi,
   // list di sini auto refresh.
+  // Juga pull "active config" — config terakhir yg disimpan dari device manapun —
+  // supaya buka di laptop baru tetap pakai setting yang sama.
   useEffect(() => {
     let cancelled = false;
-    void pullPdfLayoutPresets().then((list) => {
-      if (!cancelled) setCloudPresets(list);
+    void Promise.all([
+      pullPdfLayoutPresets(),
+      pullActiveLayoutConfig(mode),
+    ]).then(([list, activeConfig]) => {
+      if (cancelled) return;
+      setCloudPresets(list);
+      if (activeConfig) {
+        setLocal(activeConfig);
+        saveIghLayoutConfig(activeConfig, mode);
+        lastSeenConfigRef.current = activeConfig;
+      }
     });
     const off = onPdfPresetsChanged(() => {
       void pullPdfLayoutPresets().then((list) => {

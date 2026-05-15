@@ -239,6 +239,10 @@ const presetToRow = (p: IghLayoutPreset, agencyId: string) => {
   };
 };
 
+// Reserved ID prefix untuk menyimpan "active config" lintas device.
+// Record ini tidak pernah ditampilkan di daftar preset user.
+const ACTIVE_CONFIG_ID_PREFIX = "__active__:";
+
 /** Pull semua preset agency aktif → simpan ke localStorage cache → return list. */
 export async function pullPdfLayoutPresets(): Promise<IghLayoutPreset[]> {
   if (!isSupabaseConfigured()) return [];
@@ -250,9 +254,66 @@ export async function pullPdfLayoutPresets(): Promise<IghLayoutPreset[]> {
     console.warn("pullPdfLayoutPresets failed", error);
     return [];
   }
-  const list = (data ?? []).map(presetFromRow);
+  // Saring reserved __active__:* entries supaya tidak muncul di daftar preset.
+  const list = (data ?? [])
+    .filter((r) => !String((r as Record<string, unknown>).id ?? "").startsWith(ACTIVE_CONFIG_ID_PREFIX))
+    .map(presetFromRow);
   savePresetsCache(list);
   return list;
+}
+
+/**
+ * Simpan config aktif (bukan preset bernama) ke cloud supaya sync lintas device.
+ * Pakai reserved ID `__active__:private` / `__active__:group`.
+ * Fire-and-forget — tidak perlu di-await.
+ */
+export async function pushActiveLayoutConfig(
+  config: IghLayoutConfig,
+  mode: IghLayoutMode,
+): Promise<void> {
+  if (!isSupabaseConfigured()) return;
+  try {
+    const agencyId = requireAgencyId();
+    const id = `${ACTIVE_CONFIG_ID_PREFIX}${mode}`;
+    const payload: Record<string, unknown> = {
+      ...(config as unknown as Record<string, unknown>),
+      [MODE_MARKER_KEY]: mode,
+    };
+    await supabase!.from("pdf_layout_presets").upsert({
+      id,
+      name: id,
+      payload,
+      agency_id: agencyId,
+      created_at: new Date().toISOString(),
+      updated_at: new Date().toISOString(),
+    });
+  } catch {
+    // Silent — cross-device sync bersifat best-effort
+  }
+}
+
+/**
+ * Ambil config aktif dari cloud untuk mode tertentu.
+ * Return null kalau belum ada (user belum pernah sync dari device manapun).
+ */
+export async function pullActiveLayoutConfig(
+  mode: IghLayoutMode,
+): Promise<IghLayoutConfig | null> {
+  if (!isSupabaseConfigured()) return null;
+  try {
+    const id = `${ACTIVE_CONFIG_ID_PREFIX}${mode}`;
+    const { data, error } = await supabase!
+      .from("pdf_layout_presets")
+      .select("payload")
+      .eq("id", id)
+      .maybeSingle();
+    if (error || !data) return null;
+    const rawPayload = (data.payload as Record<string, unknown>) ?? {};
+    const { [MODE_MARKER_KEY]: _mode, ...cfgRaw } = rawPayload;
+    return mergeConfig(DEFAULT_IGH_LAYOUT, cfgRaw as Partial<IghLayoutConfig>);
+  } catch {
+    return null;
+  }
 }
 
 /** Upsert satu preset (insert kalau ID baru, update kalau sudah ada). */
