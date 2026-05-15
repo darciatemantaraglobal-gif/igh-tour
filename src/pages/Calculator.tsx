@@ -81,6 +81,7 @@ interface CalcState {
   madinahNightsOverride?: number;
   includedItems: string[];
   excludedItems: string[];
+  pricingNote: string;
   // Group offer extras
   tier: string;
   title: string;
@@ -178,6 +179,7 @@ function makeDefault(): CalcState {
     hotelMadinahName: "",
     includedItems: [],
     excludedItems: [],
+    pricingNote: "",
     tier: "",
     title: "",
     subtitle: "",
@@ -922,6 +924,7 @@ export default function Calculator() {
       // Source currency dari perPaxDisplay di matrix — saat ini hardcoded USD
       // di computeGroupMatrix call (line ~748). Kalau berubah, sinkronin.
       displayCurrency: "USD",
+      pricingNote: calc.pricingNote || undefined,
     };
   }, [calc, quote, effectiveRates.USD, effectiveRates.SAR, groupMatrix]);
 
@@ -1648,6 +1651,7 @@ export default function Calculator() {
           madinahNightsOverride: calc.madinahNightsOverride,
           includedItems: calc.includedItems,
           excludedItems: calc.excludedItems,
+          pricingNote: calc.pricingNote,
           tier: calc.tier,
           title: calc.title,
           subtitle: calc.subtitle,

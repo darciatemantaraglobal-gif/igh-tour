@@ -86,6 +86,9 @@ export interface IghPdfData {
    *  Default "USD" (back-compat). Kalau `cfg.pdfCurrency` beda dari ini,
    *  generator otomatis konversi via IDR canonical / kurs. */
   displayCurrency?: "USD" | "IDR" | "SAR";
+  /** Catatan tambahan yang ditulis di bawah baris disclaimer harga.
+   *  Kosong/undefined = tidak ada teks tambahan. */
+  pricingNote?: string;
 }
 
 // ── Coordinate helpers ─────────────────────────────────────────────────────
@@ -613,6 +616,19 @@ export async function buildIghPdf(data: IghPdfData, layout?: Partial<IghLayoutCo
     drawTextCentered(page, priceText, {
       ...PRICE_BOX, size: cfg.pricing.size, minSize: 12, font: priceBold, color: WHITE,
       yOffsetPdf: cfg.pricing.yOffsetPdf,
+    });
+  }
+
+  // ── 4b. PRICING NOTE (catatan tambahan di bawah disclaimer) ──
+  if (data.pricingNote?.trim()) {
+    const noteFont = fontFor("pricing", "regular");
+    drawText(page, data.pricingNote.trim(), {
+      leftPx: 47,
+      topPx: 657,
+      size: 7.5,
+      font: noteFont,
+      color: DARK,
+      maxWidthPx: 646,
     });
   }
 

@@ -15,6 +15,8 @@ export interface QuotationMeta {
   madinahNightsOverride?: number;
   includedItems: string[];
   excludedItems: string[];
+  /** Catatan tambahan di bawah baris "harga sewaktu-waktu dapat berubah" di PDF. */
+  pricingNote: string;
   // ── Group offer (PDF gaya "Penawaran Paket LA") ──
   tier: string;            // cth: "Premium"
   title: string;           // judul utama, bisa multi-line
@@ -437,6 +439,21 @@ export function QuotationMetaSection({ value, onChange }: Props) {
             />
           </label>
         </div>
+
+        <label className="flex flex-col gap-1">
+          <span style={M} className="text-[10px] font-bold text-slate-600">
+            Catatan Tambahan di PDF
+            <span style={M} className="ml-1 text-[9px] font-normal text-slate-400">(muncul di bawah "harga sewaktu-waktu dapat berubah")</span>
+          </span>
+          <textarea
+            rows={2}
+            value={value.pricingNote}
+            onChange={(e) => set("pricingNote", e.target.value)}
+            placeholder="cth: Harga berlaku s/d 31 Desember 2026. Konfirmasi ke admin untuk ketersediaan kursi."
+            style={M}
+            className="px-2 py-1.5 rounded-lg border border-slate-200 bg-white text-[12px] font-semibold focus:outline-none focus:ring-1 focus:ring-orange-400 resize-none"
+          />
+        </label>
 
         <div className="grid grid-cols-1 md:grid-cols-2 gap-2.5">
           <ListEditor
