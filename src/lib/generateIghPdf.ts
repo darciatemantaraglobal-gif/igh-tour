@@ -531,16 +531,24 @@ export async function buildIghPdf(data: IghPdfData, layout?: Partial<IghLayoutCo
   // Subtitle "X Malam" scaling proportional ke hotel.size dengan rasio 0.45,
   // clamp 7..14 agar tetap readable dan tidak overlap dengan elemen di bawahnya.
   const subtitleSize = Math.max(7, Math.min(14, cfg.hotel.size * 0.45));
+  // Lebar kolom dihitung dari posisi config supaya auto-shrink tidak cap font
+  // size di nilai rendah untuk nama hotel yang panjang (bug: slider font size
+  // seolah tidak berpengaruh ke Hotel Madinah kalau namanya panjang).
+  const TPL_W_PX = 740;
+  const RIGHT_MARGIN_PX = 47;
+  const COLUMN_GAP_PX = 30;
+  const makkahColWidthPx = cfg.hotel.madinahXPx - cfg.hotel.makkahXPx - COLUMN_GAP_PX;
+  const madinahColWidthPx = TPL_W_PX - cfg.hotel.madinahXPx - RIGHT_MARGIN_PX;
   drawText(page, pick(cfg.hotel.makkahText, data.hotelMakkah || "—"), {
     leftPx: cfg.hotel.makkahXPx, topPx: cfg.hotel.topPx, size: cfg.hotel.size,
-    minSize: 12, font: hotelBold, color: ORANGE, maxWidthPx: 285,
+    font: hotelBold, color: ORANGE, maxWidthPx: makkahColWidthPx,
   });
   drawText(page, `${Math.max(0, data.makkahNights || 0)} Malam`, {
     leftPx: cfg.hotel.makkahXPx, topPx: cfg.hotel.topPx + cfg.hotel.subtitleOffsetPx, size: subtitleSize, font: hotelReg, color: DARK,
   });
   drawText(page, pick(cfg.hotel.madinahText, data.hotelMadinah || "—"), {
     leftPx: cfg.hotel.madinahXPx, topPx: cfg.hotel.topPx, size: cfg.hotel.size,
-    minSize: 12, font: hotelBold, color: ORANGE, maxWidthPx: 285,
+    font: hotelBold, color: ORANGE, maxWidthPx: madinahColWidthPx,
   });
   drawText(page, `${Math.max(0, data.madinahNights || 0)} Malam`, {
     leftPx: cfg.hotel.madinahXPx, topPx: cfg.hotel.topPx + cfg.hotel.subtitleOffsetPx, size: subtitleSize, font: hotelReg, color: DARK,
