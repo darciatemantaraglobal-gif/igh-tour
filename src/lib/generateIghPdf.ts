@@ -27,6 +27,11 @@ export type { IghLayoutConfig } from "./ighPdfConfig";
 
 const TEMPLATE_URL = "/igh-blank-template.pdf";
 const TEMPLATE_GROUP_URL = "/templates/IGH_Blank_Template_Group.pdf";
+// Varian layout 2-halaman: template halaman 1 TANPA kotak Sudah/Belum Termasuk
+// (ruangnya dipakai catatan), + template halaman rincian (logo + footer saja).
+const TEMPLATE_PRIVATE_NOLIST_URL = "/templates/IGH_Blank_Private_NoList.pdf";
+const TEMPLATE_GROUP_NOLIST_URL = "/templates/IGH_Blank_Group_NoList.pdf";
+const TEMPLATE_DETAIL_URL = "/templates/IGH_Blank_Detail.pdf";
 
 // Template canonical pixel size (matches the 150-DPI render of igh-template.pdf)
 const TPL_W_PX = 740;
@@ -93,6 +98,14 @@ export interface IghPdfData {
   /** Catatan tambahan yang ditulis di bawah baris disclaimer harga.
    *  Kosong/undefined = tidak ada teks tambahan. */
   pricingNote?: string;
+  /** Layout 2 halaman (default true): halaman 1 = harga + catatan, halaman 2 =
+   *  daftar Sudah/Belum Termasuk. false = layout lama (daftar di halaman 1).
+   *  Diabaikan kalau user pakai custom template. */
+  listsOnPage2?: boolean;
+  /** Poin tambahan di halaman 1, di bawah disclaimer harga (layout 2 halaman). */
+  topNotes?: string[];
+  /** Poin tambahan di halaman 2, di bawah daftar Sudah/Belum Termasuk. */
+  bottomNotes?: string[];
 }
 
 // ── Coordinate helpers ─────────────────────────────────────────────────────
@@ -333,7 +346,12 @@ export async function buildIghPdf(data: IghPdfData, layout?: Partial<IghLayoutCo
   // Default "compact" supaya preset/storage lama yg belum punya field ini
   // tetap render dengan satuan ringkas (jt/M) — backward compatible.
   const priceMode: "full" | "compact" = cfg.priceDisplayMode ?? "compact";
-  const defaultTplUrl = isGroup ? TEMPLATE_GROUP_URL : TEMPLATE_URL;
+  // Layout 2 halaman cuma utk template bawaan; custom template punya area daftar
+  // sendiri jadi tetap pakai alur lama (daftar di halaman 1).
+  const twoPage = !cfg.customTemplate && data.listsOnPage2 !== false;
+  const defaultTplUrl = isGroup
+    ? (twoPage ? TEMPLATE_GROUP_NOLIST_URL : TEMPLATE_GROUP_URL)
+    : (twoPage ? TEMPLATE_PRIVATE_NOLIST_URL : TEMPLATE_URL);
 
   // Custom background template logic:
   //   - PDF custom → load file itu sebagai base PDF (sama treatment kayak default)
@@ -710,15 +728,48 @@ export async function buildIghPdf(data: IghPdfData, layout?: Partial<IghLayoutCo
   }
 
   const listFont = fontFor("checklist", "semiBold");
+  const includedItems = splitOverrideOrUse(cfg.checklist.includedText, data.included);
+  const excludedItems = splitOverrideOrUse(cfg.checklist.excludedText, data.excluded);
+  const topNotes = (data.topNotes ?? []).map((x) => x.trim()).filter(Boolean);
+  const bottomNotes = (data.bottomNotes ?? []).map((x) => x.trim()).filter(Boolean);
+
+  if (twoPage) {
+    // ── LAYOUT 2 HALAMAN ──
+    // Halaman 1: ruang bekas kotak Sudah/Belum Termasuk dipakai poin tambahan.
+    // Halaman 2: daftar lengkap + poin tambahan bawah.
+    if (topNotes.length > 0) {
+      drawBulletBlock(page, topNotes, {
+        x: 29,
+        topPt: !isGroup && !data.pricingNote?.trim() ? 366 : 392,
+        bottomPt: 478,
+        maxW: PAGE_W - 58,
+        size: 9,
+        font: fontFor("checklist", "semiBold"),
+      });
+    }
+    if (includedItems.length > 0 || excludedItems.length > 0 || bottomNotes.length > 0) {
+      await appendDetailPages(pdf, {
+        included: includedItems,
+        excluded: excludedItems,
+        notes: bottomNotes,
+        projectName,
+        timeline: data.timelineShort || data.timeline || "",
+        regular: fontFor("checklist", "regular"),
+        semiBold: fontFor("checklist", "semiBold"),
+        bold: fontFor("checklist", "bold"),
+        useTemplate: true,
+      });
+    }
+    return pdf.save();
+  }
+
+  // ── LAYOUT LAMA: daftar di halaman 1 ──
   const firstBaselinePxResolved = cfg.checklist.firstBaselinePx + cfg.checklist.yOffsetPx;
   // Izinkan hingga 10 item; batas nyata ditentukan oleh `footerCutoffPx` di bawah
   // sehingga tidak ada item yang overlap dengan footer, apapun mode-nya.
   const MAX_LIST_ROWS = 10;
   // Batas bawah (template-px) agar teks checklist tidak menembus area footer.
-  // Margin 10px dari garis footer memberikan breathing room visual.
   const footerCutoffPx = cfg.footer.topPx - 10;
-  const includedItems = splitOverrideOrUse(cfg.checklist.includedText, data.included);
-  const excludedItems = splitOverrideOrUse(cfg.checklist.excludedText, data.excluded);
   const bulletSymbol = (cfg.checklist.listBullet ?? "•").trim();
 
   // Kalau list kepanjangan, halaman 1 cuma jadi RINGKASAN (muat di 5 baris
@@ -749,19 +800,17 @@ export async function buildIghPdf(data: IghPdfData, layout?: Partial<IghLayoutCo
     footerCutoffPx,
   );
 
-  // ── 7. HALAMAN RINCIAN ──
-  // Template halaman 1 cuma muat ±5 baris per kolom. Kalau user nambah point
-  // lebih banyak, daftar LENGKAP ditaruh di halaman tambahan (otomatis nambah
-  // halaman lagi kalau masih kepanjangan) — gak ada point yang kepotong.
   if (needsDetailPage) {
     await appendDetailPages(pdf, {
       included: includedItems,
       excluded: excludedItems,
+      notes: [],
       projectName,
-      timeline: pick(undefined, data.timelineShort || data.timeline || ""),
+      timeline: data.timelineShort || data.timeline || "",
       regular: fontFor("checklist", "regular"),
       semiBold: fontFor("checklist", "semiBold"),
       bold: fontFor("checklist", "bold"),
+      useTemplate: false,
     });
   }
 
@@ -798,35 +847,74 @@ function paginateItems(heights: number[], pageBudget: number): number[][] {
   return pages;
 }
 
+/** Gambar list bullet dgn wrap + hanging indent. Berhenti kalau mentok
+ *  `bottomPt`. Return posisi top (pt) setelah blok terakhir. */
+function drawBulletBlock(
+  page: PDFPage,
+  items: string[],
+  o: { x: number; topPt: number; bottomPt: number; maxW: number; size: number; font: PDFFont; color?: RGB },
+): number {
+  const lineH = o.size * 1.3;
+  const gap = 3.5;
+  const bulletW = o.font.widthOfTextAtSize("•  ", o.size);
+  let top = o.topPt;
+  for (const item of items) {
+    const lines = wrapAtSize(item, o.font, o.size, o.maxW - bulletW);
+    if (top + lines.length * lineH > o.bottomPt) break;
+    lines.forEach((ln, li) => {
+      const y = PAGE_H - (top + li * lineH + o.size * 0.85);
+      if (li === 0) page.drawText("•", { x: o.x, y, size: o.size, font: o.font, color: o.color ?? DARK });
+      page.drawText(ln, { x: o.x + bulletW, y, size: o.size, font: o.font, color: o.color ?? DARK });
+    });
+    top += lines.length * lineH + gap;
+  }
+  return top;
+}
+
 async function appendDetailPages(
   pdf: PDFDocument,
   o: {
     included: string[];
     excluded: string[];
+    /** Poin tambahan (di bawah dua kolom). */
+    notes: string[];
     projectName: string;
     timeline: string;
     regular: PDFFont;
     semiBold: PDFFont;
     bold: PDFFont;
+    /** true = pakai template bawaan "Detail" (logo + footer sudah ada).
+     *  false = halaman putih; logo & footer digambar manual. */
+    useTemplate: boolean;
   },
 ) {
   let logo: Awaited<ReturnType<PDFDocument["embedPng"]>> | null = null;
-  try {
-    logo = await pdf.embedPng(await fetchBytesCached("/logo-igh-tour-text.png"));
-  } catch (e) {
-    console.warn("[pdf] logo halaman rincian gagal di-load, dilewati", e);
+  let detailTpl: PDFDocument | null = null;
+  if (o.useTemplate) {
+    try {
+      detailTpl = await PDFDocument.load(await fetchBytesCached(TEMPLATE_DETAIL_URL));
+    } catch (e) {
+      console.warn("[pdf] template halaman rincian gagal di-load, pakai halaman putih", e);
+    }
+  }
+  if (!detailTpl) {
+    try {
+      logo = await pdf.embedPng(await fetchBytesCached("/logo-igh-tour-text.png"));
+    } catch (e) {
+      console.warn("[pdf] logo halaman rincian gagal di-load, dilewati", e);
+    }
   }
 
   const MARGIN = 30;
   const COL_W = 168;
   const COL_GAP = PAGE_W - MARGIN * 2 - COL_W * 2;
-  const NUM_W = 16;
-  const SIZE = 8.5;
+  const SIZE = 9;
   const LINE_H = SIZE * 1.3;
-  const ITEM_PAD = 5;
-  const LIST_TOP = 150;     // top-down dari tepi atas page (pt)
+  const ITEM_GAP = 3.5;
+  const BULLET_W = o.semiBold.widthOfTextAtSize("•  ", SIZE);
+  const LIST_TOP = 168;     // top-down dari tepi atas page (pt)
   const LIST_BOTTOM = 470;  // di atas garis footer
-  const textW = COL_W - NUM_W - 4;
+  const textW = COL_W - BULLET_W;
 
   const clean = (xs: string[]) => xs.map((x) => x.trim()).filter(Boolean);
   const cols = [
@@ -834,82 +922,115 @@ async function appendDetailPages(
     { items: clean(o.excluded), x: MARGIN + COL_W + COL_GAP, color: DETAIL_RED, title: "Belum Termasuk" },
   ].map((c) => {
     const wrapped = c.items.map((t) => wrapAtSize(t, o.semiBold, SIZE, textW));
-    const heights = wrapped.map((l) => l.length * LINE_H + ITEM_PAD * 2);
-    return { ...c, wrapped, pages: paginateItems(heights, LIST_BOTTOM - LIST_TOP) };
+    const heights = wrapped.map((l) => l.length * LINE_H + ITEM_GAP);
+    return { ...c, wrapped, heights, pages: paginateItems(heights, LIST_BOTTOM - LIST_TOP) };
   });
-  const pageCount = Math.max(...cols.map((c) => c.pages.length), 1);
+  const listPages = cols.some((c) => c.items.length > 0)
+    ? Math.max(...cols.map((c) => c.pages.length), 1)
+    : 0;
+  const notes = clean(o.notes);
+
+  // Tinggi akhir list di halaman terakhir → nentuin catatan muat di situ atau pindah halaman.
+  const usedOnLastListPage = listPages === 0 ? LIST_TOP : LIST_TOP + Math.max(
+    ...cols.map((c) => (c.pages[listPages - 1] ?? []).reduce((sum, i) => sum + c.heights[i], 0)),
+  );
+  const NOTES_HEAD_H = 22;
+  const notesLines = notes.map((t) => wrapAtSize(t, o.semiBold, SIZE, PAGE_W - MARGIN * 2 - BULLET_W).length);
+  const notesH = notesLines.reduce((sum, n) => sum + n * LINE_H + ITEM_GAP, 0) + NOTES_HEAD_H;
+  const notesFitOnLastListPage = listPages > 0 && usedOnLastListPage + 14 + notesH <= LIST_BOTTOM;
+  const pageCount = listPages + (notes.length > 0 && !notesFitOnLastListPage ? 1 : 0);
 
   for (let pi = 0; pi < pageCount; pi++) {
-    const page = pdf.addPage([PAGE_W, PAGE_H]);
+    let page: PDFPage;
+    if (detailTpl) {
+      const [copied] = await pdf.copyPages(detailTpl, [0]);
+      page = pdf.addPage(copied);
+    } else {
+      page = pdf.addPage([PAGE_W, PAGE_H]);
+    }
     const yTop = (top: number) => PAGE_H - top;
+    const isListPage = pi < listPages;
 
-    // Logo kiri-atas + judul di kanannya.
-    if (logo) {
-      const lw = 56;
-      const lh = (lw * logo.height) / logo.width;
-      page.drawImage(logo, { x: MARGIN, y: yTop(26) - lh, width: lw, height: lh });
+    if (!detailTpl) {
+      // Halaman putih: logo + judul + footer digambar manual.
+      if (logo) {
+        const lw = 56;
+        const lh = (lw * logo.height) / logo.width;
+        page.drawImage(logo, { x: MARGIN, y: yTop(26) - lh, width: lw, height: lh });
+      }
+      const titleX = MARGIN + 80;
+      page.drawText("Rincian Paket", { x: titleX, y: yTop(52), size: 15, font: o.bold, color: ORANGE });
+      const nameLines = wrapAtSize(o.projectName || "—", o.semiBold, 9, PAGE_W - titleX - MARGIN).slice(0, 2);
+      nameLines.forEach((ln, i) => {
+        page.drawText(ln, { x: titleX, y: yTop(70 + i * 12), size: 9, font: o.semiBold, color: DARK });
+      });
+      if (o.timeline) {
+        page.drawText(o.timeline, { x: titleX, y: yTop(70 + nameLines.length * 12 + 2), size: 8, font: o.regular, color: GREY_MUTED });
+      }
+      page.drawLine({
+        start: { x: MARGIN, y: yTop(486) }, end: { x: PAGE_W - MARGIN, y: yTop(486) },
+        thickness: 0.6, color: DETAIL_RULE,
+      });
+      page.drawText("@", { x: MARGIN, y: yTop(502), size: 8, font: o.bold, color: ORANGE });
+      page.drawText("instagram.com/igh.tour", { x: MARGIN + 12, y: yTop(502), size: 7, font: o.regular, color: DARK });
+      const mail = "igh.tours.travel@gmail.com";
+      const mw = o.regular.widthOfTextAtSize(mail, 7);
+      page.drawText("@", { x: PAGE_W - MARGIN - mw - 12, y: yTop(502), size: 8, font: o.bold, color: ORANGE });
+      page.drawText(mail, { x: PAGE_W - MARGIN - mw, y: yTop(502), size: 7, font: o.regular, color: DARK });
+      const tag = "Pilihanmu untuk menjelajah";
+      page.drawText(tag, { x: (PAGE_W - o.regular.widthOfTextAtSize(tag, 7)) / 2, y: yTop(523), size: 7, font: o.regular, color: GREY_MUTED });
+      const big = "Timur Tengah!";
+      page.drawText(big, { x: (PAGE_W - o.bold.widthOfTextAtSize(big, 14)) / 2, y: yTop(540), size: 14, font: o.bold, color: ORANGE });
     }
-    const titleX = MARGIN + 80;
-    page.drawText("Rincian Paket", { x: titleX, y: yTop(52), size: 15, font: o.bold, color: ORANGE });
-    const nameLines = wrapAtSize(o.projectName || "—", o.semiBold, 9, PAGE_W - titleX - MARGIN).slice(0, 2);
-    nameLines.forEach((ln, i) => {
-      page.drawText(ln, { x: titleX, y: yTop(70 + i * 12), size: 9, font: o.semiBold, color: DARK });
-    });
-    if (o.timeline) {
-      page.drawText(o.timeline, { x: titleX, y: yTop(70 + nameLines.length * 12 + 2), size: 8, font: o.regular, color: GREY_MUTED });
-    }
+    // Garis pemisah di bawah logo.
     page.drawLine({
-      start: { x: MARGIN, y: yTop(108) }, end: { x: PAGE_W - MARGIN, y: yTop(108) },
+      start: { x: MARGIN, y: yTop(118) }, end: { x: PAGE_W - MARGIN, y: yTop(118) },
       thickness: 0.6, color: DETAIL_RULE,
     });
 
-    for (const c of cols) {
-      // Pill judul kolom.
-      const pw = 112, ph = 17;
-      const px = c.x + (COL_W - pw) / 2;
-      page.drawSvgPath(roundedRectPath(pw, ph, 4), { x: px, y: yTop(122), color: c.color, borderWidth: 0 });
-      const tw = o.bold.widthOfTextAtSize(c.title, 9.5);
-      page.drawText(c.title, { x: px + (pw - tw) / 2, y: yTop(122) - 12, size: 9.5, font: o.bold, color: WHITE });
+    let cursorAfterLists = LIST_TOP;
+    if (isListPage) {
+      for (const c of cols) {
+        // Pill judul kolom.
+        const pw = 112, ph = 17;
+        const px = c.x + (COL_W - pw) / 2;
+        page.drawSvgPath(roundedRectPath(pw, ph, 4), { x: px, y: yTop(132), color: c.color, borderWidth: 0 });
+        const tw = o.bold.widthOfTextAtSize(c.title, 9.5);
+        page.drawText(c.title, { x: px + (pw - tw) / 2, y: yTop(132) - 12, size: 9.5, font: o.bold, color: WHITE });
 
-      let cursor = LIST_TOP;
-      for (const idx of c.pages[pi] ?? []) {
-        const lines = c.wrapped[idx];
-        const baseline = cursor + ITEM_PAD + SIZE;
-        page.drawText(String(idx + 1).padStart(2, "0"), {
-          x: c.x + 2, y: yTop(baseline), size: 7.5, font: o.regular, color: GREY_MUTED,
-        });
-        lines.forEach((ln, li) => {
-          page.drawText(ln, { x: c.x + NUM_W + 4, y: yTop(baseline + li * LINE_H), size: SIZE, font: o.semiBold, color: DARK });
-        });
-        cursor += lines.length * LINE_H + ITEM_PAD * 2;
-        page.drawLine({
-          start: { x: c.x, y: yTop(cursor) }, end: { x: c.x + COL_W, y: yTop(cursor) },
-          thickness: 0.5, color: DETAIL_RULE,
-        });
-      }
-      if (c.items.length === 0 && pi === 0) {
-        page.drawText("—", { x: c.x + NUM_W, y: yTop(LIST_TOP + ITEM_PAD + SIZE), size: SIZE, font: o.regular, color: GREY_MUTED });
+        let cursor = LIST_TOP;
+        for (const idx of c.pages[pi] ?? []) {
+          const lines = c.wrapped[idx];
+          lines.forEach((ln, li) => {
+            const y = yTop(cursor + li * LINE_H + SIZE * 0.85);
+            if (li === 0) page.drawText("•", { x: c.x + 4, y, size: SIZE, font: o.semiBold, color: DARK });
+            page.drawText(ln, { x: c.x + 4 + BULLET_W, y, size: SIZE, font: o.semiBold, color: DARK });
+          });
+          cursor += c.heights[idx];
+        }
+        cursorAfterLists = Math.max(cursorAfterLists, cursor);
+        if (c.items.length === 0 && pi === 0) {
+          page.drawText("—", { x: c.x + 4, y: yTop(LIST_TOP + SIZE * 0.85), size: SIZE, font: o.regular, color: GREY_MUTED });
+        }
       }
     }
 
-    // Footer (sama dgn template halaman 1).
-    page.drawLine({
-      start: { x: MARGIN, y: yTop(486) }, end: { x: PAGE_W - MARGIN, y: yTop(486) },
-      thickness: 0.6, color: DETAIL_RULE,
-    });
-    page.drawText("@", { x: MARGIN, y: yTop(502), size: 8, font: o.bold, color: ORANGE });
-    page.drawText("instagram.com/igh.tour", { x: MARGIN + 12, y: yTop(502), size: 7, font: o.regular, color: DARK });
-    const mail = "igh.tours.travel@gmail.com";
-    const mw = o.regular.widthOfTextAtSize(mail, 7);
-    page.drawText("@", { x: PAGE_W - MARGIN - mw - 12, y: yTop(502), size: 8, font: o.bold, color: ORANGE });
-    page.drawText(mail, { x: PAGE_W - MARGIN - mw, y: yTop(502), size: 7, font: o.regular, color: DARK });
-    const tag = "Pilihanmu untuk menjelajah";
-    page.drawText(tag, { x: (PAGE_W - o.regular.widthOfTextAtSize(tag, 7)) / 2, y: yTop(523), size: 7, font: o.regular, color: GREY_MUTED });
-    const big = "Timur Tengah!";
-    page.drawText(big, { x: (PAGE_W - o.bold.widthOfTextAtSize(big, 14)) / 2, y: yTop(540), size: 14, font: o.bold, color: ORANGE });
+    // Poin tambahan: di bawah list (halaman list terakhir) atau halaman sendiri.
+    const notesHere = notes.length > 0 && (isListPage ? pi === listPages - 1 && notesFitOnLastListPage : true);
+    if (notesHere) {
+      const headTop = isListPage ? cursorAfterLists + 14 : LIST_TOP - 24;
+      page.drawText("Catatan Tambahan", { x: MARGIN, y: yTop(headTop + 9), size: 9.5, font: o.bold, color: ORANGE });
+      drawBulletBlock(page, notes, {
+        x: MARGIN + 4,
+        topPt: headTop + NOTES_HEAD_H,
+        bottomPt: LIST_BOTTOM,
+        maxW: PAGE_W - MARGIN * 2 - 4,
+        size: SIZE,
+        font: o.semiBold,
+      });
+    }
   }
 }
-
 
 /**
  * Render WhatsApp icon + nomor admin di footer, dengan link annotation

@@ -15,6 +15,12 @@ export interface QuotationMeta {
   madinahNightsOverride?: number;
   includedItems: string[];
   excludedItems: string[];
+  /** Poin tambahan (bisa diedit) di halaman 1 PDF, di bawah "harga sewaktu-waktu dapat berubah". */
+  topNotes: string[];
+  /** Poin tambahan (bisa diedit) di halaman 2 PDF, di bawah daftar Sudah/Belum Termasuk. */
+  bottomNotes: string[];
+  /** true = daftar Sudah/Belum Termasuk dipindah ke halaman 2 (layout 2 halaman). */
+  listsOnPage2: boolean;
   /** Catatan tambahan di bawah baris "harga sewaktu-waktu dapat berubah" di PDF. */
   pricingNote: string;
   // ── Group offer (PDF gaya "Penawaran Paket LA") ──
@@ -39,10 +45,12 @@ const M = { fontFamily: "'Manrope', sans-serif" };
 // ── Template storage helpers (localStorage) ────────────────────────────────
 interface ListTemplate { name: string; items: string[]; updatedAt: number }
 
-function tplStorageKey(kind: "included" | "excluded") {
+type ListKind = "included" | "excluded" | "topNotes" | "bottomNotes";
+
+function tplStorageKey(kind: ListKind) {
   return `igh:list-templates:${kind}`;
 }
-function loadTemplates(kind: "included" | "excluded"): ListTemplate[] {
+function loadTemplates(kind: ListKind): ListTemplate[] {
   try {
     const raw = localStorage.getItem(tplStorageKey(kind));
     if (!raw) return [];
@@ -50,22 +58,26 @@ function loadTemplates(kind: "included" | "excluded"): ListTemplate[] {
     return Array.isArray(arr) ? arr.filter((t) => t && typeof t.name === "string") : [];
   } catch { return []; }
 }
-function saveTemplates(kind: "included" | "excluded", list: ListTemplate[]) {
+function saveTemplates(kind: ListKind, list: ListTemplate[]) {
   localStorage.setItem(tplStorageKey(kind), JSON.stringify(list));
 }
 
 function ListEditor({
-  title, color, kind, items, onChange,
+  title, color, kind, items, onChange, hint, placeholder = "cth: Visa Umroh",
 }: {
   title: string;
-  color: "green" | "red";
-  kind: "included" | "excluded";
+  color: "green" | "red" | "blue";
+  kind: ListKind;
   items: string[];
   onChange: (next: string[]) => void;
+  hint?: string;
+  placeholder?: string;
 }) {
   const palette = color === "green"
     ? { bg: "bg-emerald-50", border: "border-emerald-200", chip: "bg-emerald-100 text-emerald-700", btn: "border-emerald-300 text-emerald-700 hover:bg-emerald-100" }
-    : { bg: "bg-rose-50", border: "border-rose-200", chip: "bg-rose-100 text-rose-700", btn: "border-rose-300 text-rose-700 hover:bg-rose-100" };
+    : color === "blue"
+      ? { bg: "bg-sky-50", border: "border-sky-200", chip: "bg-sky-100 text-sky-700", btn: "border-sky-300 text-sky-700 hover:bg-sky-100" }
+      : { bg: "bg-rose-50", border: "border-rose-200", chip: "bg-rose-100 text-rose-700", btn: "border-rose-300 text-rose-700 hover:bg-rose-100" };
 
   const [templates, setTemplates] = useState<ListTemplate[]>([]);
   const [menuOpen, setMenuOpen] = useState(false);
@@ -193,6 +205,7 @@ function ListEditor({
           </button>
         </div>
       </div>
+      {hint && <p className="text-[10px] text-slate-500 leading-snug">{hint}</p>}
       <div className="space-y-1.5">
         {items.length === 0 && (
           <p className="text-[10.5px] text-slate-400 italic">Belum ada item — klik "Tambah"</p>
@@ -210,7 +223,7 @@ function ListEditor({
                 next[idx] = e.target.value;
                 onChange(next);
               }}
-              placeholder="cth: Visa Umroh"
+              placeholder={placeholder}
               style={M}
               className="flex-1 h-7 rounded-md border border-slate-200 bg-white px-2 text-[12px] focus:outline-none focus:ring-1 focus:ring-orange-400"
             />
@@ -471,6 +484,44 @@ export function QuotationMetaSection({ value, onChange }: Props) {
             onChange={(next) => set("excludedItems", next)}
           />
         </div>
+
+        <label className="flex items-start gap-2 rounded-lg border border-orange-200 bg-orange-50/50 px-3 py-2 cursor-pointer">
+          <input
+            type="checkbox"
+            checked={value.listsOnPage2}
+            onChange={(e) => set("listsOnPage2", e.target.checked)}
+            className="mt-0.5 h-3.5 w-3.5 accent-orange-500"
+          />
+          <span style={M} className="text-[11px] font-semibold text-slate-700 leading-snug">
+            Pindahkan "Sudah / Belum Termasuk" ke halaman 2
+            <span className="block text-[10px] font-normal text-slate-500">
+              Halaman 1 jadi lebih lega (harga + catatan), halaman 2 memuat daftar lengkap. Matikan untuk layout lama (daftar di halaman 1).
+            </span>
+          </span>
+        </label>
+
+        {value.listsOnPage2 && (
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-2.5">
+            <ListEditor
+              title="Poin Tambahan — Halaman 1"
+              color="green"
+              kind="topNotes"
+              items={value.topNotes}
+              onChange={(next) => set("topNotes", next)}
+              hint="Muncul di bawah “harga sewaktu-waktu dapat berubah”. Muat sekitar 8 baris."
+              placeholder="cth: Harga belum termasuk PPN"
+            />
+            <ListEditor
+              title="Poin Tambahan — Halaman 2"
+              color="blue"
+              kind="bottomNotes"
+              items={value.bottomNotes}
+              onChange={(next) => set("bottomNotes", next)}
+              hint="Muncul di bawah daftar Sudah / Belum Termasuk."
+              placeholder="cth: Pembayaran DP 50% saat booking"
+            />
+          </div>
+        )}
       </div>
     </div>
   );

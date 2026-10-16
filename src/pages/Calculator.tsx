@@ -82,6 +82,9 @@ interface CalcState {
   madinahNightsOverride?: number;
   includedItems: string[];
   excludedItems: string[];
+  topNotes: string[];
+  bottomNotes: string[];
+  listsOnPage2: boolean;
   pricingNote: string;
   // Group offer extras
   tier: string;
@@ -180,6 +183,9 @@ function makeDefault(): CalcState {
     hotelMadinahName: "",
     includedItems: [],
     excludedItems: [],
+    topNotes: [],
+    bottomNotes: [],
+    listsOnPage2: true,
     pricingNote: "",
     tier: "",
     title: "",
@@ -983,6 +989,9 @@ export default function Calculator() {
       // di computeGroupMatrix call (line ~748). Kalau berubah, sinkronin.
       displayCurrency: "USD",
       pricingNote: calc.pricingNote || undefined,
+      listsOnPage2: calc.listsOnPage2 !== false,
+      topNotes: (calc.topNotes ?? []).map((x) => x.trim()).filter(Boolean),
+      bottomNotes: (calc.bottomNotes ?? []).map((x) => x.trim()).filter(Boolean),
     };
   }, [calc, quote, effectiveRates.USD, effectiveRates.SAR, groupMatrix]);
 
@@ -1709,6 +1718,9 @@ export default function Calculator() {
           madinahNightsOverride: calc.madinahNightsOverride,
           includedItems: calc.includedItems,
           excludedItems: calc.excludedItems,
+          topNotes: calc.topNotes ?? [],
+          bottomNotes: calc.bottomNotes ?? [],
+          listsOnPage2: calc.listsOnPage2 !== false,
           pricingNote: calc.pricingNote,
           tier: calc.tier,
           title: calc.title,
