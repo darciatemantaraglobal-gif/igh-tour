@@ -329,6 +329,11 @@ export default function Packages() {
                     </div>
                   </div>
 
+                  <div className="flex items-center justify-between rounded-xl border border-orange-100 bg-orange-50/50 px-2.5 py-1.5 text-[10.5px] md:text-[11px]">
+                    <span className="font-semibold text-slate-600">HPP{pkg.people > 0 ? ` (${pkg.people} pax)` : ""}</span>
+                    <span className="font-extrabold text-orange-700">{pkg.hpp > 0 ? formatCurrency(Math.round(pkg.hpp)) : "—"}</span>
+                  </div>
+
                   <div className="grid grid-cols-3 gap-1 md:gap-1.5 text-[9.5px] md:text-[10px] font-semibold text-slate-600">
                     <span className="flex min-w-0 items-center gap-1 rounded-lg md:rounded-xl bg-white px-1.5 md:px-2 py-1.5 md:py-2 ring-1 ring-slate-100">
                       <Plane className="h-3 w-3 shrink-0 text-orange-500" />

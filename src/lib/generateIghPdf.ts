@@ -720,22 +720,194 @@ export async function buildIghPdf(data: IghPdfData, layout?: Partial<IghLayoutCo
   const includedItems = splitOverrideOrUse(cfg.checklist.includedText, data.included);
   const excludedItems = splitOverrideOrUse(cfg.checklist.excludedText, data.excluded);
   const bulletSymbol = (cfg.checklist.listBullet ?? "•").trim();
+
+  // Kalau list kepanjangan, halaman 1 cuma jadi RINGKASAN (muat di 5 baris
+  // template, tiap item 1 baris) dan daftar lengkapnya pindah ke halaman
+  // rincian. Tanpa ini, item ke-6 dst numpuk & saling timpa di halaman 1.
+  const needsDetailPage = Math.max(includedItems.length, excludedItems.length) > DETAIL_PAGE_THRESHOLD;
+  const summarize = (items: string[]): string[] => {
+    const cleaned = items.map((x) => x.trim()).filter(Boolean);
+    if (!needsDetailPage || cleaned.length <= DETAIL_PAGE_THRESHOLD) return cleaned;
+    const lineW = (235 - 8) * SCALE - listFont.widthOfTextAtSize(`${bulletSymbol} `, cfg.checklist.size);
+    const head = cleaned
+      .slice(0, DETAIL_PAGE_THRESHOLD - 1)
+      .map((x) => truncateToWidth(x, listFont, cfg.checklist.size, lineW));
+    return [...head, `+${cleaned.length - head.length} poin lainnya (hal. 2)`];
+  };
   drawList(
-    page, includedItems,
+    page, summarize(includedItems),
     firstBaselinePxResolved, cfg.checklist.rowSpacingPx, MAX_LIST_ROWS,
     cfg.checklist.leftXPx, listFont, cfg.checklist.size,
     cfg.checklist.sudahTermasukAlign ?? "center", bulletSymbol,
     footerCutoffPx,
   );
   drawList(
-    page, excludedItems,
+    page, summarize(excludedItems),
     firstBaselinePxResolved, cfg.checklist.rowSpacingPx, MAX_LIST_ROWS,
     cfg.checklist.rightXPx, listFont, cfg.checklist.size,
     cfg.checklist.belumTermasukAlign ?? "center", bulletSymbol,
     footerCutoffPx,
   );
 
+  // ── 7. HALAMAN RINCIAN ──
+  // Template halaman 1 cuma muat ±5 baris per kolom. Kalau user nambah point
+  // lebih banyak, daftar LENGKAP ditaruh di halaman tambahan (otomatis nambah
+  // halaman lagi kalau masih kepanjangan) — gak ada point yang kepotong.
+  if (needsDetailPage) {
+    await appendDetailPages(pdf, {
+      included: includedItems,
+      excluded: excludedItems,
+      projectName,
+      timeline: pick(undefined, data.timelineShort || data.timeline || ""),
+      regular: fontFor("checklist", "regular"),
+      semiBold: fontFor("checklist", "semiBold"),
+      bold: fontFor("checklist", "bold"),
+    });
+  }
+
   return pdf.save();
+}
+
+/** Jumlah baris yg muat rapi di halaman 1 (nomor 01–05 di template). Lebih
+ *  dari ini → halaman rincian ditambahkan. */
+const DETAIL_PAGE_THRESHOLD = 5;
+
+const DETAIL_GREEN: RGB = rgb(153 / 255, 204 / 255, 51 / 255);
+const DETAIL_RED: RGB = rgb(236 / 255, 78 / 255, 78 / 255);
+const DETAIL_RULE: RGB = rgb(0.82, 0.83, 0.88);
+
+/** Path SVG rounded-rect (pdf-lib `drawRectangle` gak punya radius). Origin
+ *  kiri-atas, dipakai dgn `drawSvgPath` yg flip sumbu Y otomatis. */
+function roundedRectPath(w: number, h: number, r: number): string {
+  return `M ${r} 0 H ${w - r} A ${r} ${r} 0 0 1 ${w} ${r} V ${h - r} A ${r} ${r} 0 0 1 ${w - r} ${h} ` +
+    `H ${r} A ${r} ${r} 0 0 1 0 ${h - r} V ${r} A ${r} ${r} 0 0 1 ${r} 0 Z`;
+}
+
+/** Bagi item ke beberapa halaman berdasarkan tinggi tiap item (hasil wrap). */
+function paginateItems(heights: number[], pageBudget: number): number[][] {
+  const pages: number[][] = [[]];
+  let used = 0;
+  heights.forEach((h, i) => {
+    if (used + h > pageBudget && pages[pages.length - 1].length > 0) {
+      pages.push([]);
+      used = 0;
+    }
+    pages[pages.length - 1].push(i);
+    used += h;
+  });
+  return pages;
+}
+
+async function appendDetailPages(
+  pdf: PDFDocument,
+  o: {
+    included: string[];
+    excluded: string[];
+    projectName: string;
+    timeline: string;
+    regular: PDFFont;
+    semiBold: PDFFont;
+    bold: PDFFont;
+  },
+) {
+  let logo: Awaited<ReturnType<PDFDocument["embedPng"]>> | null = null;
+  try {
+    logo = await pdf.embedPng(await fetchBytesCached("/logo-igh-tour-text.png"));
+  } catch (e) {
+    console.warn("[pdf] logo halaman rincian gagal di-load, dilewati", e);
+  }
+
+  const MARGIN = 30;
+  const COL_W = 168;
+  const COL_GAP = PAGE_W - MARGIN * 2 - COL_W * 2;
+  const NUM_W = 16;
+  const SIZE = 8.5;
+  const LINE_H = SIZE * 1.3;
+  const ITEM_PAD = 5;
+  const LIST_TOP = 150;     // top-down dari tepi atas page (pt)
+  const LIST_BOTTOM = 470;  // di atas garis footer
+  const textW = COL_W - NUM_W - 4;
+
+  const clean = (xs: string[]) => xs.map((x) => x.trim()).filter(Boolean);
+  const cols = [
+    { items: clean(o.included), x: MARGIN, color: DETAIL_GREEN, title: "Sudah Termasuk" },
+    { items: clean(o.excluded), x: MARGIN + COL_W + COL_GAP, color: DETAIL_RED, title: "Belum Termasuk" },
+  ].map((c) => {
+    const wrapped = c.items.map((t) => wrapAtSize(t, o.semiBold, SIZE, textW));
+    const heights = wrapped.map((l) => l.length * LINE_H + ITEM_PAD * 2);
+    return { ...c, wrapped, pages: paginateItems(heights, LIST_BOTTOM - LIST_TOP) };
+  });
+  const pageCount = Math.max(...cols.map((c) => c.pages.length), 1);
+
+  for (let pi = 0; pi < pageCount; pi++) {
+    const page = pdf.addPage([PAGE_W, PAGE_H]);
+    const yTop = (top: number) => PAGE_H - top;
+
+    // Logo kiri-atas + judul di kanannya.
+    if (logo) {
+      const lw = 56;
+      const lh = (lw * logo.height) / logo.width;
+      page.drawImage(logo, { x: MARGIN, y: yTop(26) - lh, width: lw, height: lh });
+    }
+    const titleX = MARGIN + 80;
+    page.drawText("Rincian Paket", { x: titleX, y: yTop(52), size: 15, font: o.bold, color: ORANGE });
+    const nameLines = wrapAtSize(o.projectName || "—", o.semiBold, 9, PAGE_W - titleX - MARGIN).slice(0, 2);
+    nameLines.forEach((ln, i) => {
+      page.drawText(ln, { x: titleX, y: yTop(70 + i * 12), size: 9, font: o.semiBold, color: DARK });
+    });
+    if (o.timeline) {
+      page.drawText(o.timeline, { x: titleX, y: yTop(70 + nameLines.length * 12 + 2), size: 8, font: o.regular, color: GREY_MUTED });
+    }
+    page.drawLine({
+      start: { x: MARGIN, y: yTop(108) }, end: { x: PAGE_W - MARGIN, y: yTop(108) },
+      thickness: 0.6, color: DETAIL_RULE,
+    });
+
+    for (const c of cols) {
+      // Pill judul kolom.
+      const pw = 112, ph = 17;
+      const px = c.x + (COL_W - pw) / 2;
+      page.drawSvgPath(roundedRectPath(pw, ph, 4), { x: px, y: yTop(122), color: c.color, borderWidth: 0 });
+      const tw = o.bold.widthOfTextAtSize(c.title, 9.5);
+      page.drawText(c.title, { x: px + (pw - tw) / 2, y: yTop(122) - 12, size: 9.5, font: o.bold, color: WHITE });
+
+      let cursor = LIST_TOP;
+      for (const idx of c.pages[pi] ?? []) {
+        const lines = c.wrapped[idx];
+        const baseline = cursor + ITEM_PAD + SIZE;
+        page.drawText(String(idx + 1).padStart(2, "0"), {
+          x: c.x + 2, y: yTop(baseline), size: 7.5, font: o.regular, color: GREY_MUTED,
+        });
+        lines.forEach((ln, li) => {
+          page.drawText(ln, { x: c.x + NUM_W + 4, y: yTop(baseline + li * LINE_H), size: SIZE, font: o.semiBold, color: DARK });
+        });
+        cursor += lines.length * LINE_H + ITEM_PAD * 2;
+        page.drawLine({
+          start: { x: c.x, y: yTop(cursor) }, end: { x: c.x + COL_W, y: yTop(cursor) },
+          thickness: 0.5, color: DETAIL_RULE,
+        });
+      }
+      if (c.items.length === 0 && pi === 0) {
+        page.drawText("—", { x: c.x + NUM_W, y: yTop(LIST_TOP + ITEM_PAD + SIZE), size: SIZE, font: o.regular, color: GREY_MUTED });
+      }
+    }
+
+    // Footer (sama dgn template halaman 1).
+    page.drawLine({
+      start: { x: MARGIN, y: yTop(486) }, end: { x: PAGE_W - MARGIN, y: yTop(486) },
+      thickness: 0.6, color: DETAIL_RULE,
+    });
+    page.drawText("@", { x: MARGIN, y: yTop(502), size: 8, font: o.bold, color: ORANGE });
+    page.drawText("instagram.com/igh.tour", { x: MARGIN + 12, y: yTop(502), size: 7, font: o.regular, color: DARK });
+    const mail = "igh.tours.travel@gmail.com";
+    const mw = o.regular.widthOfTextAtSize(mail, 7);
+    page.drawText("@", { x: PAGE_W - MARGIN - mw - 12, y: yTop(502), size: 8, font: o.bold, color: ORANGE });
+    page.drawText(mail, { x: PAGE_W - MARGIN - mw, y: yTop(502), size: 7, font: o.regular, color: DARK });
+    const tag = "Pilihanmu untuk menjelajah";
+    page.drawText(tag, { x: (PAGE_W - o.regular.widthOfTextAtSize(tag, 7)) / 2, y: yTop(523), size: 7, font: o.regular, color: GREY_MUTED });
+    const big = "Timur Tengah!";
+    page.drawText(big, { x: (PAGE_W - o.bold.widthOfTextAtSize(big, 14)) / 2, y: yTop(540), size: 14, font: o.bold, color: ORANGE });
+  }
 }
 
 
@@ -930,14 +1102,17 @@ function drawList(
   //   → interItemGapPx ≤ (availablePx - (totalLines - nItems) * lineAdvancePx) / (nItems - 1)
   //
   // Catatan: nItems = 1 tidak butuh kompresi (tidak ada gap antar item).
-  let interItemGapPx = Math.max(rowSpacingPx - lineAdvancePx, lineAdvancePx * 0.4);
+  // Net advance per item 1-baris = interItemGapPx (lihat derivasi di atas), jadi
+  // default-nya HARUS rowSpacingPx. Sebelumnya `rowSpacingPx - lineAdvancePx`
+  // (≈9px < tinggi 1 baris ≈22px) → item numpuk & saling timpa walau cuma 3 item.
+  let interItemGapPx = Math.max(rowSpacingPx, lineAdvancePx);
   if (maxBaselinePx !== undefined && cleaned.length > 1) {
     const availablePx = maxBaselinePx - firstBaselinePx;
     const textOnlyPx  = (totalLines - cleaned.length) * lineAdvancePx;
     if (textOnlyPx < availablePx) {
       const maxGapPx = (availablePx - textOnlyPx) / (cleaned.length - 1);
       // Minimum gap = 15% tinggi baris — agar ada sedikit breathing room antar item.
-      const minGapPx = lineAdvancePx * 0.15;
+      const minGapPx = lineAdvancePx * 0.9; // jangan lebih rapat dari 1 baris → gak saling timpa
       interItemGapPx = Math.max(minGapPx, Math.min(interItemGapPx, maxGapPx));
     }
     // Kalau textOnlyPx >= availablePx (teks terlalu padat bahkan tanpa gap),
@@ -1013,6 +1188,33 @@ export async function downloadIghPdf(
   setTimeout(() => URL.revokeObjectURL(url), 2000);
 }
 
+/** Render SEMUA halaman PDF jadi data-URL PNG (halaman 1 = penawaran, sisanya
+ *  = halaman rincian bila ada). */
+export async function renderIghPdfPages(
+  data: IghPdfData,
+  scale = 1.5,
+  layout?: Partial<IghLayoutConfig>,
+): Promise<string[]> {
+  const bytes = await buildIghPdf(data, layout);
+  const pdfjs = await import("pdfjs-dist");
+  const workerUrl = (await import("pdfjs-dist/build/pdf.worker.mjs?url")).default;
+  pdfjs.GlobalWorkerOptions.workerSrc = workerUrl;
+  const doc = await pdfjs.getDocument({ data: bytes }).promise;
+  const urls: string[] = [];
+  for (let n = 1; n <= doc.numPages; n++) {
+    const page = await doc.getPage(n);
+    const viewport = page.getViewport({ scale });
+    const canvas = document.createElement("canvas");
+    canvas.width = viewport.width;
+    canvas.height = viewport.height;
+    const ctx = canvas.getContext("2d")!;
+    await page.render({ canvasContext: ctx, viewport, canvas }).promise;
+    urls.push(canvas.toDataURL("image/png"));
+  }
+  return urls;
+}
+
+/** Preview halaman 1 saja (dipakai thumbnail). */
 export async function renderIghPdfPreview(
   data: IghPdfData,
   scale = 1.5,

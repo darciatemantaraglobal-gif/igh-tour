@@ -47,6 +47,7 @@ import { cn } from "@/lib/utils";
 import { useRatesStore } from "@/store/ratesStore";
 import { useRegional } from "@/lib/regional";
 import { savePackageCalc } from "@/lib/packageCalcStorage";
+import { isSupabaseConfigured } from "@/lib/supabase";
 
 // ── Types ─────────────────────────────────────────────────────────────────────
 
@@ -1077,36 +1078,33 @@ export default function Calculator() {
 
       const newPkg = await createPackage(draft);
 
-      // Persist seluruh row kalkulator (hotels/transports/visas/dst) ke
-      // package_calculations[newPkg.id] supaya pas user buka /packages/[id],
-      // semua input udah otomatis ke-load (bukan form kosong).
-      // Project hanya field yg ada di ProfessionalCalcState — PDF/quotation
-      // metadata (customerName, dateRange, dst) gak di-carry karena
-      // PackageDetail.calc shape-nya beda & gak butuh field itu.
+      // Persist SELURUH state kalkulator ke package_calculations[newPkg.id]
+      // supaya pas user buka /packages/[id] (atau lihat HPP-nya besok), semua
+      // input balik utuh: row biaya + metadata penawaran (included/excluded,
+      // judul, customer, tanggal, dst). Sebelumnya cuma row biaya yg disimpen,
+      // jadi list "Sudah/Belum Termasuk" & info penawaran hilang.
+      // `hppSnapshot` = angka final saat paket dibuat, buat rujukan kalau
+      // kurs/harga row berubah di kemudian hari.
       const calcRowsPayload = {
-        mode: calc.mode,
+        ...calc,
         packageName: name,
         destination,
         pax: Math.max(1, calc.pax || 1),
-        hotels: calc.hotels,
-        transports: calc.transports,
-        tickets: calc.tickets,
-        visas: calc.visas,
-        destinations: calc.destinations,
-        fnbs: calc.fnbs,
-        staffs: calc.staffs,
-        generalCosts: calc.generalCosts,
-        commissionFee: calc.commissionFee,
-        marginPercent: calc.marginPercent,
-        marginMode: calc.marginMode,
-        marginFixed: calc.marginFixed,
-        discount: calc.discount,
-        groupSettings: calc.groupSettings,
+        hppSnapshot: {
+          hpp: Math.round(quote.hpp || 0),
+          finalPrice: Math.round(quote.finalPrice || 0),
+          perPaxFinal: Math.round(quote.perPaxFinal || 0),
+          savedAt: new Date().toISOString(),
+        },
       };
-      // Write-through: localStorage instan + cloud push (best-effort).
-      // PackageDetail bakal nge-read dari localStorage dulu (fast path),
-      // lalu pullPackageCalc nge-overwrite dgn versi cloud kalau beda.
-      savePackageCalc(newPkg.id, calcRowsPayload);
+      // Write-through: localStorage instan + cloud push. Kita tunggu hasil
+      // push supaya kalau cloud gagal user diberi tahu (bukan diem-diem lokal).
+      const cloudOk = await savePackageCalc(newPkg.id, calcRowsPayload);
+      if (!cloudOk && isSupabaseConfigured()) {
+        toast.warning("Paket tersimpan di perangkat ini, tapi belum masuk cloud", {
+          description: "Buka paketnya & simpan ulang saat online, atau cek koneksi.",
+        });
+      }
 
       toast.success("Paket Trip berhasil dibuat!", {
         description: `${name} · ${formatCurrency(quote.finalPrice)}`,

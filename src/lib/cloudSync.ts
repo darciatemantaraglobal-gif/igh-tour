@@ -43,9 +43,12 @@ export async function pullPackageCalc(packageId: string): Promise<unknown | null
 export async function pushPackageCalc(packageId: string, payload: unknown): Promise<void> {
   if (!isSupabaseConfigured()) return;
   const agencyId = requireAgencyId();
-  await supabase!.from("package_calculations").upsert({
+  const { error } = await supabase!.from("package_calculations").upsert({
     package_id: packageId, agency_id: agencyId, payload, updated_at: new Date().toISOString(),
   });
+  // Dulu error di-abaikan → badge bilang "synced" padahal row gak pernah masuk
+  // (RLS / FK / payload terlalu besar), dan data hilang di device lain.
+  if (error) throw new Error(error.message || "Gagal menyimpan kalkulasi ke cloud");
 }
 
 export async function pullAllPackageCalcs(): Promise<Record<string, unknown>> {

@@ -32,6 +32,7 @@ import { useRatesStore } from "@/store/ratesStore";
 import { useJamaahStore, type Jamaah } from "@/store/tripsStore";
 import { useRegional } from "@/lib/regional";
 import { isSupabaseConfigured } from "@/lib/supabase";
+import { usePackagesStore } from "@/store/packagesStore";
 import { pullPackageCalc } from "@/lib/cloudSync";
 import {
   savePackageCalc,
@@ -716,7 +717,9 @@ export default function PackageDetail() {
   useEffect(() => {
     if (!id || !pkg) return;
     const fallback = makeDefault(Math.max(1, pkg.people), pkg.name, pkg.destination);
-    setCalc(loadPackageCalc(id, fallback));
+    const initialCalc = loadPackageCalc(id, fallback);
+    loadedCalcRef.current = initialCalc;
+    setCalc(initialCalc);
     if (isSupabaseConfigured()) {
       void pullPackageCalc(id).then((cloud) => {
         if (!cloud) {
@@ -736,7 +739,9 @@ export default function PackageDetail() {
           );
           return;
         }
-        setCalc({ ...fallback, ...(cloud as Partial<ProfessionalCalcState>) });
+        const cloudCalc = { ...fallback, ...(cloud as Partial<ProfessionalCalcState>) };
+        loadedCalcRef.current = cloudCalc;
+        setCalc(cloudCalc);
         // Cloud berhasil di-pull & shape-nya valid → tandain "synced" supaya
         // badge di header langsung nyala hijau pas pertama buka halaman.
         setPackageCalcSyncStatus(id, "synced");
@@ -747,12 +752,28 @@ export default function PackageDetail() {
     }
   }, [id, pkg?.id]);
 
+  // Calc hasil load (local / cloud). Autosave di-skip selama calc masih ===
+  // objek ini, supaya sekadar BUKA halaman gak nge-push default kosong
+  // (harga 0) menimpa data asli di cloud kalau pull-nya gagal/telat.
+  const loadedCalcRef = useRef<ProfessionalCalcState | null>(null);
   const saveTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  // Angka terbaru buat sinkron ke row `packages` (HPP, total, pax) — dibaca
+  // dari ref biar timer autosave gak perlu re-arm tiap kurs/quote berubah.
+  const pkgSyncRef = useRef<{ hpp: number; totalIDR: number; people: number } | null>(null);
   useEffect(() => {
-    if (!id || !calc) return;
+    if (!id || !calc || calc === loadedCalcRef.current) return;
     if (saveTimerRef.current) clearTimeout(saveTimerRef.current);
     saveTimerRef.current = setTimeout(() => {
-      savePackageCalc(id, calc);
+      void savePackageCalc(id, calc);
+      // Jaga HPP / total di list paket tetap sama dgn kalkulator, jadi angka
+      // "kemarin" selalu bisa dilihat tanpa buka ulang kalkulatornya.
+      const next = pkgSyncRef.current;
+      const cur = usePackagesStore.getState().items.find((p) => p.id === id);
+      if (next && cur && (cur.hpp !== next.hpp || cur.totalIDR !== next.totalIDR || cur.people !== next.people)) {
+        void usePackagesStore.getState().update(id, next).catch((err) => {
+          console.warn("[PackageDetail] sinkron HPP ke paket gagal:", err);
+        });
+      }
     }, 1500);
     return () => {
       if (saveTimerRef.current) clearTimeout(saveTimerRef.current);
@@ -794,6 +815,10 @@ export default function PackageDetail() {
       rates: effectiveRates,
     });
   }, [calc, effectiveRates]);
+
+  pkgSyncRef.current = calc && quote
+    ? { hpp: Math.round(quote.hpp || 0), totalIDR: Math.round(quote.finalPrice || 0), people: Math.max(1, calc.pax || 1) }
+    : null;
 
   // ── State updaters ──────────────────────────────────────────────────────────
 
@@ -886,6 +911,7 @@ export default function PackageDetail() {
       name: calc.packageName || pkg.name,
       destination: calc.destination || pkg.destination,
       people: calc.pax,
+      hpp: Math.round(quote.hpp || 0),
       totalIDR: quote.finalPrice,
       status: "Calculated",
     });
@@ -1015,7 +1041,11 @@ export default function PackageDetail() {
       </div>
 
       {/* ── Stat cards ── */}
-      <div className="grid grid-cols-3 gap-1.5 md:gap-3">
+      <div className="grid grid-cols-2 sm:grid-cols-4 gap-1.5 md:gap-3">
+        <div className="rounded-xl md:rounded-2xl border bg-white px-2.5 py-2 md:p-4">
+          <p className="text-[9.5px] md:text-xs text-muted-foreground leading-tight" style={M}>HPP</p>
+          <p className="mt-0.5 text-[12px] md:text-xl font-bold leading-tight tabular-nums" style={M}>{fmtCompactIDR(pkg.hpp || 0)}</p>
+        </div>
         <div className="rounded-xl md:rounded-2xl border bg-white px-2.5 py-2 md:p-4">
           <p className="text-[9.5px] md:text-xs text-muted-foreground leading-tight" style={M}>Total Paket</p>
           <p className="mt-0.5 text-[12px] md:text-xl font-bold text-orange-600 leading-tight tabular-nums" style={M}>{fmtCompactIDR(pkg.totalIDR)}</p>

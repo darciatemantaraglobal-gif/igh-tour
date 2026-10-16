@@ -87,23 +87,29 @@ export function savePackageCalcLocal(packageId: string, value: unknown): void {
  *  Side-effect: update `PackageCalcSyncStatus` per packageId selama proses
  *  push. UI komponen yang subscribe via `usePackageCalcSyncStatus(id)`
  *  bakal re-render otomatis (idle → syncing → synced/local-only). */
-export function savePackageCalc(packageId: string, value: unknown): void {
+export function savePackageCalc(packageId: string, value: unknown): Promise<boolean> {
   savePackageCalcLocal(packageId, value);
   // Supabase belum siap (env var kosong / user belum login) → cuma local cache.
   // Tetap dianggep sukses dari sisi UX, tapi badge di-set "local-only".
   if (!isSupabaseConfigured()) {
     setPackageCalcSyncStatus(packageId, "local-only");
-    return;
+    return Promise.resolve(false);
   }
   setPackageCalcSyncStatus(packageId, "syncing");
-  void pushPackageCalc(packageId, value)
-    .then(() => setPackageCalcSyncStatus(packageId, "synced"))
+  // Resolve true = sampai cloud, false = cuma local. Caller boleh abaikan
+  // (fire-and-forget) atau pakai buat kasih tau user kalau cloud gagal.
+  return pushPackageCalc(packageId, value)
+    .then(() => {
+      setPackageCalcSyncStatus(packageId, "synced");
+      return true;
+    })
     .catch((err) => {
       console.warn(
         `[packageCalc] cloud push gagal utk packageId=${packageId}:`,
         err,
       );
       setPackageCalcSyncStatus(packageId, "local-only");
+      return false;
     });
 }
 

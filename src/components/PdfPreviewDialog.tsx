@@ -3,7 +3,7 @@ import * as DialogPrimitive from "@radix-ui/react-dialog";
 import { Dialog, DialogContent, DialogTitle } from "@/components/ui/dialog";
 import { Download, Hand, Loader2, MousePointer2, Redo2, Sliders, Undo2, X, Zap, ZapOff } from "lucide-react";
 import { toast } from "sonner";
-import { downloadIghPdf, renderIghPdfPreview, type IghPdfData } from "@/lib/generateIghPdf";
+import { downloadIghPdf, renderIghPdfPages, type IghPdfData } from "@/lib/generateIghPdf";
 import { loadIghLayoutConfig, saveIghLayoutConfig, type IghLayoutConfig, type IghLayoutMode } from "@/lib/ighPdfConfig";
 import { PdfLayoutTuner } from "./PdfLayoutTuner";
 import { PdfInteractiveOverlay } from "./PdfInteractiveOverlay";
@@ -20,6 +20,8 @@ const EDIT_MODE_STORAGE_KEY = "igh:pdf-edit-mode";
 
 export function PdfPreviewDialog({ open, onOpenChange, data }: Props) {
   const [previewUrl, setPreviewUrl] = useState<string | null>(null);
+  // Halaman rincian (hal. 2+), ada kalau list Sudah/Belum Termasuk > 5 item.
+  const [extraPreviewUrls, setExtraPreviewUrls] = useState<string[]>([]);
   const [loading, setLoading] = useState(false);
   const [downloading, setDownloading] = useState(false);
   const [live, setLive] = useState<boolean>(() => {
@@ -206,8 +208,12 @@ export function PdfPreviewDialog({ open, onOpenChange, data }: Props) {
 
     const timer = window.setTimeout(() => {
       if (!initial) setLoading(true);
-      renderIghPdfPreview(data, 1.4, layout)
-        .then((url) => { if (!cancelled) setPreviewUrl(url); })
+      renderIghPdfPages(data, 1.4, layout)
+        .then((urls) => {
+          if (cancelled) return;
+          setPreviewUrl(urls[0] ?? null);
+          setExtraPreviewUrls(urls.slice(1));
+        })
         .catch((err) => {
           console.error("preview render failed", err);
           if (!cancelled) toast.error("Gagal menampilkan preview PDF");
@@ -353,6 +359,18 @@ export function PdfPreviewDialog({ open, onOpenChange, data }: Props) {
       ) : (
         <div className="text-center py-20 text-slate-500 text-sm">Preview tidak tersedia.</div>
       )}
+      {previewUrl && extraPreviewUrls.map((url, i) => (
+        <div key={i} className="mt-4">
+          <p className="text-center text-[10.5px] font-semibold text-slate-500 mb-1">Halaman {i + 2} — rincian lengkap</p>
+          <img
+            src={url}
+            alt={`Preview PDF halaman ${i + 2}`}
+            className="mx-auto rounded-lg shadow-lg border border-slate-200 bg-white"
+            style={{ maxWidth: "100%", height: "auto", opacity: loading ? 0.6 : 1, transition: "opacity 150ms" }}
+            draggable={false}
+          />
+        </div>
+      ))}
       <PdfInteractiveOverlay
         layout={layout}
         mode={mode}
