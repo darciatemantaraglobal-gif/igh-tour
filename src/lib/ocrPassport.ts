@@ -640,9 +640,9 @@ export async function scanPassportAI(
 
   try {
     const rawDataUrl =
-      imageSource instanceof File || imageSource instanceof Blob
-        ? await fileToDataUrl(imageSource)
-        : imageSource;
+      typeof imageSource === "string"
+        ? imageSource
+        : await fileToDataUrl(imageSource);
     const dataUrl = await compressForAI(rawDataUrl);
 
     // Path 1: direct OpenAI dari browser
@@ -704,9 +704,9 @@ export async function scanPassport(
   const useAIFallback = opts?.useAIFallback !== false;
   const aiOnly = opts?.aiOnly === true;
   const dataUrl =
-    imageSource instanceof File || imageSource instanceof Blob
-      ? await fileToDataUrl(imageSource)
-      : imageSource;
+    typeof imageSource === "string"
+      ? imageSource
+      : await fileToDataUrl(imageSource);
 
   // AI-only mode: skip Tesseract sepenuhnya, langsung ke OpenAI Edge Function.
   // Throws kalo gagal supaya UI bisa nampilin alasan jelas.

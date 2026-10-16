@@ -97,7 +97,7 @@ export async function listPaymentsByJamaah(jamaahId: string): Promise<Payment[]>
     .eq("jamaah_id", jamaahId)
     .order("paid_at", { ascending: false });
   if (error) throw error;
-  return (data ?? []).map(fromRow);
+  return ((data ?? []) as unknown as Record<string, unknown>[]).map(fromRow);
 }
 
 export async function listPaymentsByTrip(tripId: string): Promise<Payment[]> {
@@ -108,7 +108,7 @@ export async function listPaymentsByTrip(tripId: string): Promise<Payment[]> {
     .eq("trip_id", tripId)
     .order("paid_at", { ascending: false });
   if (error) throw error;
-  return (data ?? []).map(fromRow);
+  return ((data ?? []) as unknown as Record<string, unknown>[]).map(fromRow);
 }
 
 export async function createPayment(draft: Omit<Payment, "id" | "createdAt">): Promise<Payment> {
@@ -151,7 +151,7 @@ export async function listAllAgencyPayments(): Promise<Payment[]> {
     .select(PAYMENT_COLS)
     .order("paid_at", { ascending: false });
   if (error) throw error;
-  return (data ?? []).map(fromRow);
+  return ((data ?? []) as unknown as Record<string, unknown>[]).map(fromRow);
 }
 
 export function sumPaid(payments: Payment[]): number {

@@ -67,6 +67,9 @@ interface ProfessionalCalcState {
   // Shared financial params
   commissionFee: number;
   marginPercent: number;
+  /** Mode margin (default "percent"); "fixed" = profit tetap per pax. */
+  marginMode?: "percent" | "fixed";
+  marginFixed?: number;
   discount: number;
   groupSettings: GroupSettings;
   groupQuotation?: GroupQuotation;
@@ -152,6 +155,8 @@ function makeDefault(pax: number, name: string, dest: string): ProfessionalCalcS
     generalCosts: DEFAULT_GENERAL_COSTS.map((c) => ({ ...c })),
     commissionFee: 0,
     marginPercent: 10,
+    marginMode: "percent",
+    marginFixed: 0,
     discount: 0,
     groupSettings: { ...DEFAULT_GROUP_SETTINGS },
     groupQuotation: { ...DEFAULT_GROUP_QUOTATION },
@@ -1770,7 +1775,7 @@ export default function PackageDetail() {
                 </div>
                 {calc.marginMode === "fixed" ? (
                   <>
-                    <NumCell value={calc.marginFixed} onChange={(v) => setField("marginFixed", v)} placeholder="0" />
+                    <NumCell value={calc.marginFixed ?? 0} onChange={(v) => setField("marginFixed", v)} placeholder="0" />
                     <p style={M} className="text-[10px] text-muted-foreground">Profit per pax (IDR) — total = × jumlah pax</p>
                   </>
                 ) : (

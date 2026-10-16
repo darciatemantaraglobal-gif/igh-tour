@@ -1194,7 +1194,7 @@ function ConnectionHealthPanel() {
     const upd = (key: string, patch: Partial<HealthCheck>) =>
       setChecks((prev) => prev.map((c) => (c.key === key ? { ...c, ...patch } : c)));
 
-    const time = async <T,>(fn: () => Promise<T>): Promise<{ result: T; ms: number }> => {
+    const time = async <T,>(fn: () => PromiseLike<T>): Promise<{ result: T; ms: number }> => {
       const t0 = performance.now();
       const result = await fn();
       return { result, ms: Math.round(performance.now() - t0) };

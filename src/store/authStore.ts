@@ -82,7 +82,7 @@ interface AuthState {
   listMembers: () => Promise<MemberInfo[]>;
 
   // Self
-  changePassword: (newPassword: string) => Promise<void>;
+  changePassword: (currentPassword: string, newPassword: string) => Promise<void>;
   getSecuritySettings: () => SecuritySettings;
   updateSecuritySettings: (partial: Partial<SecuritySettings>) => void;
   setupPin: (pin: string) => Promise<void>;
@@ -113,11 +113,13 @@ async function loadCurrentUser(): Promise<AuthUser | null> {
       .select("agency_id, role, agencies(id, name)")
       .eq("user_id", session.user.id)
       .maybeSingle(),
-    supabase
-      .from("profiles")
-      .select("full_name")
-      .eq("id", session.user.id)
-      .maybeSingle()
+    Promise.resolve(
+      supabase
+        .from("profiles")
+        .select("full_name")
+        .eq("id", session.user.id)
+        .maybeSingle(),
+    )
       .then(({ data }) => data)
       .catch(() => null), // profiles table mungkin belum ada — graceful fallback
   ]);
@@ -370,9 +372,16 @@ export const useAuthStore = create<AuthState>((set, get) => ({
     });
   },
 
-  changePassword: async (newPassword) => {
+  changePassword: async (currentPassword, newPassword) => {
     if (!supabase) throw new Error("Supabase belum dikonfigurasi");
     if (newPassword.length < 8) throw new Error("Password minimal 8 karakter.");
+    // Dulu form Settings kirim (currentPw, newPw) ke fungsi 1-argumen, jadi
+    // password malah di-set ke password LAMA dan yang baru diabaikan.
+    // Sekarang password lama diverifikasi dulu sebelum diganti.
+    const email = get().user?.email;
+    if (!email) throw new Error("Sesi tidak valid, silakan login ulang.");
+    const { error: verifyError } = await supabase.auth.signInWithPassword({ email, password: currentPassword });
+    if (verifyError) throw new Error("Kata sandi saat ini salah.");
     const { error } = await supabase.auth.updateUser({ password: newPassword });
     if (error) throw error;
   },

@@ -95,7 +95,7 @@ export async function listPackages(): Promise<Package[]> {
     try {
       const { data, error } = await supabase!.from("packages").select(PACKAGES_COLS).order("created_at", { ascending: false });
       if (error) throw error;
-      const items = (data ?? []).map(fromRow);
+      const items = ((data ?? []) as unknown as Record<string, unknown>[]).map(fromRow);
       saveStore(items);
       return items;
     } catch (err) {
@@ -116,7 +116,7 @@ export async function getPackage(id: string): Promise<Package | null> {
   if (isSupabaseConfigured()) {
     const { data, error } = await supabase!.from("packages").select(PACKAGES_COLS).eq("id", id).maybeSingle();
     if (error) throw error;
-    return data ? fromRow(data) : null;
+    return data ? fromRow(data as unknown as Record<string, unknown>) : null;
   }
   return loadStore().find((p) => p.id === id) ?? null;
 }

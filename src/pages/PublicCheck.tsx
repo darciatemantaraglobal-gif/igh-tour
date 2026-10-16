@@ -34,9 +34,9 @@ export default function PublicCheck() {
     const res = await lookupBooking(c);
     if (res.ok) {
       setData(res.data);
-    } else if (res.error === "not_found") {
+    } else if ((res as { error?: string }).error === "not_found") {
       setErr("Kode booking tidak ditemukan. Cek lagi atau hubungi admin.");
-    } else if (res.error === "invalid_code") {
+    } else if ((res as { error?: string }).error === "invalid_code") {
       setErr("Format kode tidak valid.");
     } else {
       setErr("Gagal terhubung ke server. Coba lagi nanti.");

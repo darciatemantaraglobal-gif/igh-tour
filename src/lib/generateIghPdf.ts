@@ -1005,7 +1005,7 @@ function drawWhatsappFooter(
   const existing = page.node.lookup(PDFName.of("Annots"));
   if (existing && "push" in (existing as object)) {
     // PDFArray — pdf-lib exposes .push for arrays.
-    (existing as { push: (x: unknown) => void }).push(linkRef);
+    (existing as unknown as { push: (x: unknown) => void }).push(linkRef);
   } else {
     page.node.set(PDFName.of("Annots"), pdf.context.obj([linkRef]));
   }

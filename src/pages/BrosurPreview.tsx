@@ -63,7 +63,7 @@ export default function BrosurPreview() {
       const page = pdfDoc.addPage([iw, ih]);
       page.drawImage(pngImage, { x: 0, y: 0, width: iw, height: ih });
       const bytes = await pdfDoc.save();
-      const blob = new Blob([bytes], { type: "application/pdf" });
+      const blob = new Blob([bytes as BlobPart], { type: "application/pdf" });
       const url = URL.createObjectURL(blob);
       const a = document.createElement("a");
       a.href = url;

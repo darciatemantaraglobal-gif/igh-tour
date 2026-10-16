@@ -8,6 +8,7 @@ export interface Translations {
   nav_progress: string;
   nav_pdf: string;
   nav_notes: string;
+  nav_exports?: string;
   nav_settings: string;
   nav_logout: string;
   nav_group_operational: string;

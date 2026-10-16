@@ -360,7 +360,7 @@ export function PdfLayoutTuner({ config, mode = "private", onChange, onClose }: 
     section: K,
     p: Partial<IghLayoutConfig[K]>,
   ) {
-    setLocal((prev) => ({ ...prev, [section]: { ...prev[section], ...p } }));
+    setLocal((prev) => ({ ...prev, [section]: { ...(prev[section] as object), ...p } }) as IghLayoutConfig);
   }
 
   async function handleCopy() {

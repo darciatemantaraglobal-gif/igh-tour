@@ -202,7 +202,7 @@ export async function listTrips(): Promise<Trip[]> {
         .select(TRIPS_LIST_COLS)
         .order("created_at", { ascending: false });
       if (error) throw error;
-      const trips = (data ?? []).map(tripFromRow);
+      const trips = ((data ?? []) as unknown as Record<string, unknown>[]).map(tripFromRow);
       save(TRIPS_KEY, trips);
       return trips;
     } catch (err) {
@@ -294,7 +294,7 @@ export async function listAllAgencyJamaah(): Promise<Jamaah[]> {
       .select(JAMAAH_LIST_COLS)
       .order("created_at", { ascending: true });
     if (error) throw error;
-    return (data ?? []).map(jamaahFromRow);
+    return ((data ?? []) as unknown as Record<string, unknown>[]).map(jamaahFromRow);
   }
   return load<Jamaah>(JAMAAH_KEY, []);
 }
@@ -307,7 +307,7 @@ export async function listJamaah(tripId: string): Promise<Jamaah[]> {
       .eq("trip_id", tripId)
       .order("created_at", { ascending: true });
     if (error) throw error;
-    const list = (data ?? []).map(jamaahFromRow);
+    const list = ((data ?? []) as unknown as Record<string, unknown>[]).map(jamaahFromRow);
     // Merge into local cache — pertahankan photoDataUrl dari cache supaya
     // data foto offline tidak hilang saat list view di-refetch.
     const all = load<Jamaah>(JAMAAH_KEY, []);
