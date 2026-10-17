@@ -179,6 +179,67 @@ function drawTextAligned(
   page.drawText(value, { x, y, size, font: opts.font, color: opts.color });
 }
 
+/** Area disclaimer statis "* Harga sewaktu-waktu…" di template private (pt,
+ *  top-down dari tepi atas page). */
+const STATIC_DISCLAIMER_PT = { left: 26, right: 388, top: 333, bottom: 347 };
+/** Garis horizontal di atas footer template (pt, top-down). */
+const FOOTER_RULE_PT = 486;
+
+/** Catatan multi-baris: wrap ke `maxWidthPx`, kecilkan font sampai muat di
+ *  `bottomPt`, baris yg tetap gak muat dipotong "…". Kalau blok teks numpuk
+ *  dgn `maskBefore`, area itu ditutup putih dulu. Return posisi bawah (pt). */
+function drawWrappedNote(
+  page: PDFPage,
+  text: string,
+  opts: {
+    anchorXPx: number;
+    topPx: number;
+    size: number;
+    minSize: number;
+    bottomPt: number;
+    font: PDFFont;
+    color: RGB;
+    align: IghTextAlign;
+    maxWidthPx?: number;
+    maskBefore?: { left: number; right: number; top: number; bottom: number };
+  },
+): number {
+  const maxW = opts.maxWidthPx ? opts.maxWidthPx * SCALE : PAGE_W;
+  const topPt = opts.topPx * SCALE;
+  const fit = (size: number) => {
+    const lines = text.split(/\r?\n/).flatMap((para) => wrapAtSize(para, opts.font, size, maxW));
+    return { size, lines, lineH: size * 1.25 };
+  };
+  let r = fit(opts.size);
+  while (r.size > opts.minSize && topPt + r.lines.length * r.lineH > opts.bottomPt) {
+    r = fit(Math.max(opts.minSize, r.size - 0.25));
+  }
+  const maxLines = Math.max(1, Math.floor((opts.bottomPt - topPt) / r.lineH));
+  let lines = r.lines;
+  if (lines.length > maxLines) {
+    lines = lines.slice(0, maxLines);
+    lines[maxLines - 1] = truncateToWidth(`${lines[maxLines - 1]} ${r.lines.slice(maxLines).join(" ")}`, opts.font, r.size, maxW);
+  }
+  const bottomPt = topPt + lines.length * r.lineH;
+
+  const m = opts.maskBefore;
+  if (m && topPt < m.bottom && bottomPt > m.top) {
+    page.drawRectangle({
+      x: m.left, y: PAGE_H - m.bottom, width: m.right - m.left, height: m.bottom - m.top,
+      color: WHITE, borderWidth: 0,
+    });
+  }
+
+  const anchorXPt = opts.anchorXPx * SCALE;
+  lines.forEach((ln, i) => {
+    const w = opts.font.widthOfTextAtSize(ln, r.size);
+    const x = opts.align === "left" ? anchorXPt : opts.align === "right" ? anchorXPt - w : anchorXPt - w / 2;
+    const y = PAGE_H - topPt - i * r.lineH - r.size * 0.78;
+    page.drawText(ln, { x, y, size: r.size, font: opts.font, color: opts.color });
+  });
+  return bottomPt;
+}
+
 function drawTextCentered(
   page: PDFPage,
   text: string,
@@ -689,19 +750,38 @@ export async function buildIghPdf(data: IghPdfData, layout?: Partial<IghLayoutCo
     });
   }
 
-  // ── 4b. PRICING NOTE (catatan tambahan di bawah disclaimer) ──
+  // ── 4b. PRICING NOTE (catatan / T&C di bawah harga) ──
+  // Teks di-wrap multi-baris (bukan dipotong "…"). Kalau posisinya numpuk
+  // dgn disclaimer statis template ("* Harga sewaktu-waktu…"), disclaimer itu
+  // ditutup supaya catatan user menggantikannya, bukan saling timpa.
+  let noteBottomPt = 0;
   if (data.pricingNote?.trim()) {
     const pNote = cfg.pricingNote ?? { xPx: 47, topPx: 657, size: 7.5, align: "left", maxWidthPx: 646 };
     const noteFont = fontFor(cfg.fonts.overrides?.pricingNote ? "pricingNote" : "pricing", "regular");
-    drawTextAligned(page, data.pricingNote.trim(), {
+    // Batas bawah: pill "Sudah/Belum Termasuk" (layout lama) atau maksimal 4 baris.
+    const pillTopPt = twoPage ? Infinity : isGroup ? 390 : 369;
+    // Layout lama private: posisi default (657px ≈ 367pt) mepet pill dan gak
+    // ada ruang buat wrap → pakai slot disclaimer statis (ditutup di bawah).
+    let noteTopPt = pNote.topPx * SCALE;
+    if (!twoPage && !isGroup && noteTopPt > STATIC_DISCLAIMER_PT.bottom - 2 && noteTopPt < pillTopPt + 20) {
+      noteTopPt = STATIC_DISCLAIMER_PT.top + 2.5;
+    }
+    const bottomLimitPt = noteTopPt < pillTopPt - 4
+      ? Math.min(pillTopPt - 2, noteTopPt + pNote.size * 1.25 * 4)
+      : noteTopPt + pNote.size * 1.25 * 4;
+    const noteBottom = drawWrappedNote(page, data.pricingNote.trim(), {
       anchorXPx: pNote.xPx,
-      topPx: pNote.topPx,
+      topPx: noteTopPt / SCALE,
       size: pNote.size,
+      minSize: 6,
+      bottomPt: bottomLimitPt,
       font: noteFont,
       color: DARK,
       align: pNote.align ?? "left",
       maxWidthPx: pNote.maxWidthPx ?? 646,
+      maskBefore: isGroup ? undefined : STATIC_DISCLAIMER_PT,
     });
+    noteBottomPt = noteBottom;
   }
 
   // ── 5. CHECKLIST ──
@@ -740,7 +820,7 @@ export async function buildIghPdf(data: IghPdfData, layout?: Partial<IghLayoutCo
     if (topNotes.length > 0) {
       drawBulletBlock(page, topNotes, {
         x: 29,
-        topPt: !isGroup && !data.pricingNote?.trim() ? 366 : 392,
+        topPt: Math.max(!isGroup && !data.pricingNote?.trim() ? 366 : 392, noteBottomPt + 8),
         bottomPt: 478,
         maxW: PAGE_W - 58,
         size: 9,
@@ -768,8 +848,9 @@ export async function buildIghPdf(data: IghPdfData, layout?: Partial<IghLayoutCo
   // Izinkan hingga 10 item; batas nyata ditentukan oleh `footerCutoffPx` di bawah
   // sehingga tidak ada item yang overlap dengan footer, apapun mode-nya.
   const MAX_LIST_ROWS = 10;
-  // Batas bawah (template-px) agar teks checklist tidak menembus area footer.
-  const footerCutoffPx = cfg.footer.topPx - 10;
+  // Batas bawah (template-px) agar teks checklist tidak menembus garis footer
+  // template (y≈486pt) maupun baris WA/instagram di bawahnya.
+  const footerCutoffPx = Math.min(cfg.footer.topPx - 10, FOOTER_RULE_PT / SCALE - 8);
   const bulletSymbol = (cfg.checklist.listBullet ?? "•").trim();
 
   // Kalau list kepanjangan, halaman 1 cuma jadi RINGKASAN (muat di 5 baris
