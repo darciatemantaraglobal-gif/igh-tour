@@ -282,9 +282,9 @@ export interface IghLayoutConfig {
 }
 
 export const DEFAULT_IGH_LAYOUT: IghLayoutConfig = {
-  projectName: { xPx: 55, topPx: 257, size: 22, lineGapPx: 4 },
-  metaInfo: { customerXPx: 335, dateXPx: 538, topPx: 259, size: 13 },
-  hotel: { makkahXPx: 51, madinahXPx: 407, topPx: 395, size: 22, subtitleOffsetPx: 38 },
+  projectName: { xPx: 55, topPx: 257, size: 18, lineGapPx: 2 },
+  metaInfo: { customerXPx: 335, dateXPx: 538, topPx: 259, size: 11 },
+  hotel: { makkahXPx: 51, madinahXPx: 407, topPx: 395, size: 16, subtitleOffsetPx: 32 },
   pricing: { paxXPx: 47, priceXPx: 272, topPx: 518, size: 22, yOffsetPdf: -8 },
   groupPricing: {
     topPx: 510,
@@ -306,7 +306,7 @@ export const DEFAULT_IGH_LAYOUT: IghLayoutConfig = {
     firstBaselinePx: 715,
     rowSpacingPx: 28,
     yOffsetPx: 0,
-    size: 10,
+    size: 9,
     sudahTermasukAlign: "center",
     belumTermasukAlign: "center",
     listBullet: "•",
@@ -318,10 +318,10 @@ export const DEFAULT_IGH_LAYOUT: IghLayoutConfig = {
   // (kanan). WA di-tengahin di antara keduanya: starts ~310px, baseline 891.
   footer: { topPx: 891, waXPx: 290, waIconSizePt: 9, size: 7, showWhatsapp: true },
   whatsappPosition: { xPx: 290, yPx: 891 },
-  mainHeaderGap: 25,
+  mainHeaderGap: 8,
   headerSubtitleOffset: { xPx: 0, yPx: 0 },
   subtitleWidthPx: 285,
-  subtitleFontSize: 11,
+  subtitleFontSize: 9,
   dateDisplayMode: "Short",
   priceDisplayMode: "compact",
   pricingNote: { xPx: 47, topPx: 657, size: 7.5, align: "left", maxWidthPx: 646 },
@@ -359,10 +359,10 @@ export const BUILTIN_PRESET: IghLayoutPreset = {
  *  sejajar baris label, tabel 4 kolom centered di divider asli template,
  *  checklist sejajar nomor 01..05. Semua font Poppins, warna data ORANGE. */
 export const GROUP_LAYOUT: IghLayoutConfig = {
-  projectName: { xPx: 55, topPx: 90, size: 26, lineGapPx: 4 },
+  projectName: { xPx: 55, topPx: 90, size: 20, lineGapPx: 2 },
   // Group template: Date di kiri, Invoice to di kanan (kebalik dari Private)
-  metaInfo: { customerXPx: 365, dateXPx: 55, topPx: 273, size: 12 },
-  hotel: { makkahXPx: 55, madinahXPx: 384, topPx: 343, size: 22, subtitleOffsetPx: 38 },
+  metaInfo: { customerXPx: 365, dateXPx: 55, topPx: 273, size: 11 },
+  hotel: { makkahXPx: 55, madinahXPx: 384, topPx: 343, size: 16, subtitleOffsetPx: 32 },
   // Pricing private boxes tidak dipakai di group mode — biarin default.
   pricing: { paxXPx: 47, priceXPx: 272, topPx: 518, size: 22, yOffsetPdf: -8 },
   groupPricing: {
@@ -386,7 +386,7 @@ export const GROUP_LAYOUT: IghLayoutConfig = {
     firstBaselinePx: 775,
     rowSpacingPx: 26,
     yOffsetPx: 0,
-    size: 10,
+    size: 9,
     sudahTermasukAlign: "center",
     belumTermasukAlign: "center",
     listBullet: "•",
@@ -397,10 +397,10 @@ export const GROUP_LAYOUT: IghLayoutConfig = {
   // di-tune via PdfLayoutTuner per-mode storage.
   footer: { topPx: 891, waXPx: 290, waIconSizePt: 9, size: 7, showWhatsapp: true },
   whatsappPosition: { xPx: 290, yPx: 891 },
-  mainHeaderGap: 25,
+  mainHeaderGap: 8,
   headerSubtitleOffset: { xPx: 0, yPx: 0 },
   subtitleWidthPx: 285,
-  subtitleFontSize: 11,
+  subtitleFontSize: 9,
   dateDisplayMode: "Short",
   priceDisplayMode: "compact",
   pricingNote: { xPx: 47, topPx: 657, size: 7.5, align: "left", maxWidthPx: 646 },

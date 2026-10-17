@@ -161,8 +161,8 @@ function buildElements(
     const s = layout.projectName.size;
     const text = (layout.projectName.text?.trim() || projectNameText || "").trim();
     const lines = projectNameLineCount(text, s);
-    // Per generator: lineAdvance = size + lineGapPx (template-px)
-    const lineAdvance = s + layout.projectName.lineGapPx;
+    // Per generator: lineAdvance = size*1.05 (pt→px) + lineGapPx (template-px)
+    const lineAdvance = s * 1.05 * PT_TO_TPL_PX + layout.projectName.lineGapPx;
     const heightPx = (lines - 1) * lineAdvance + textBoxH(s);
     els.push({
       key: "projectName",

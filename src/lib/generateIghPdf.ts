@@ -182,6 +182,8 @@ function drawTextAligned(
 /** Area disclaimer statis "* Harga sewaktu-waktu…" di template private (pt,
  *  top-down dari tepi atas page). */
 const STATIC_DISCLAIMER_PT = { left: 26, right: 388, top: 333, bottom: 347 };
+/** Garis pemisah di bawah judul/tanggal pada template private (pt, top-down). */
+const TITLE_DIVIDER_PT = 195.6;
 /** Garis horizontal di atas footer template (pt, top-down). */
 const FOOTER_RULE_PT = 486;
 
@@ -505,7 +507,9 @@ export async function buildIghPdf(data: IghPdfData, layout?: Partial<IghLayoutCo
   //   5. Subtitle (timeline tanggal) dihitung dari Y baris terakhir + gap →
   //      otomatis turun saat judul jadi 2-4 baris, gak nimpa hotel section.
   const projectName = pick(cfg.projectName.text, (data.projectName || "—").trim());
-  const projMaxW = 285 * SCALE;
+  // Private: judul sebaris dgn kolom "Invoice to" → jangan sampai mepet/nabrak.
+  const projMaxWPx = isGroup ? 285 : Math.min(285, cfg.metaInfo.customerXPx - cfg.projectName.xPx - 16);
+  const projMaxW = projMaxWPx * SCALE;
   const projBold = fontFor("projectName", "bold");
   const projReg = fontFor("projectName", "regular");
   const projAlign: IghTextAlign = cfg.projectName.align ?? "left";
@@ -513,9 +517,18 @@ export async function buildIghPdf(data: IghPdfData, layout?: Partial<IghLayoutCo
   // — kalau lebih dari ini, biasanya udah berbenturan dgn hotel section.
   const MAX_TITLE_LINES = 4;
   const manualSegments = projectName.split("\n");
+  // Jarak antar baris dlm template-px: tinggi font (pt → px) + lineGapPx.
+  // Sebelumnya `size + lineGapPx` (pt dicampur px) → baris judul saling dempet.
+  const titleLineAdvancePx = (size: number) => (size * 1.05) / SCALE + cfg.projectName.lineGapPx;
+  // Template private bawaan: judul + tanggal harus selesai di atas garis
+  // pemisah (y≈195pt), kalau nggak nabrak label "Hotel Makkah".
+  const titleBottomPx = !isGroup && !cfg.customTemplate ? TITLE_DIVIDER_PT / SCALE - 6 : Infinity;
+  const titleSubtitleGapPx = cfg.mainHeaderGap ?? cfg.headerSubtitleGap ?? 6;
+  const titleSubtitleH = ((cfg.subtitleFontSize ?? 11) * 1.25) / SCALE;
   let projSize = cfg.projectName.size;
   let projLines: string[] = [];
-  while (projSize > 14) {
+  const MIN_TITLE_PT = 13;
+  for (;;) {
     projLines = [];
     for (const seg of manualSegments) {
       // Empty manual line (user double-tap Enter) = preserved as blank gap.
@@ -526,12 +539,20 @@ export async function buildIghPdf(data: IghPdfData, layout?: Partial<IghLayoutCo
       const wrapped = wrapAtSize(seg, projBold, projSize, projMaxW);
       projLines.push(...wrapped);
     }
-    if (projLines.length <= MAX_TITLE_LINES) break;
-    projSize -= 1;
+    const blockH = projLines.length * titleLineAdvancePx(projSize) + titleSubtitleGapPx + titleSubtitleH;
+    if (projLines.length <= MAX_TITLE_LINES && cfg.projectName.topPx + blockH <= titleBottomPx) break;
+    if (projSize <= MIN_TITLE_PT) break;
+    projSize = Math.max(MIN_TITLE_PT, projSize - 0.5);
   }
-  if (projLines.length > MAX_TITLE_LINES) projLines = projLines.slice(0, MAX_TITLE_LINES);
+  // Masih gak muat di ukuran minimum → batasi jumlah baris, sisa dipotong "…".
+  const roomPx = titleBottomPx - cfg.projectName.topPx - titleSubtitleGapPx - titleSubtitleH;
+  const maxTitleLines = Math.max(1, Math.min(MAX_TITLE_LINES, Math.floor(roomPx / titleLineAdvancePx(projSize))));
+  if (projLines.length > maxTitleLines) {
+    const rest = projLines.slice(maxTitleLines - 1).join(" ");
+    projLines = [...projLines.slice(0, maxTitleLines - 1), truncateToWidth(rest, projBold, projSize, projMaxW)];
+  }
   // Pakai lineGap absolut (px) supaya user bisa rapetin/longgarin tanpa tergantung font size.
-  const projLH = projSize + cfg.projectName.lineGapPx;
+  const projLH = titleLineAdvancePx(projSize);
   let py = cfg.projectName.topPx;
   for (const line of projLines) {
     // Skip drawText untuk baris kosong tapi tetep advance Y supaya gap visible.
@@ -543,7 +564,7 @@ export async function buildIghPdf(data: IghPdfData, layout?: Partial<IghLayoutCo
         font: projBold,
         color: ORANGE,
         align: projAlign,
-        maxWidthPx: 285,
+        maxWidthPx: projMaxWPx,
       });
     }
     py += projLH;
@@ -613,7 +634,7 @@ export async function buildIghPdf(data: IghPdfData, layout?: Partial<IghLayoutCo
   const hotelReg = fontFor("hotel", "regular");
   // Subtitle "X Malam" scaling proportional ke hotel.size dengan rasio 0.45,
   // clamp 7..14 agar tetap readable dan tidak overlap dengan elemen di bawahnya.
-  const subtitleSize = Math.max(7, Math.min(14, cfg.hotel.size * 0.45));
+  const subtitleSize = Math.max(8, Math.min(14, cfg.hotel.size * 0.45));
   // Lebar kolom dihitung dari posisi config supaya auto-shrink tidak cap font
   // size di nilai rendah untuk nama hotel yang panjang (bug: slider font size
   // seolah tidak berpengaruh ke Hotel Madinah kalau namanya panjang).
@@ -823,8 +844,8 @@ export async function buildIghPdf(data: IghPdfData, layout?: Partial<IghLayoutCo
         topPt: Math.max(!isGroup && !data.pricingNote?.trim() ? 366 : 392, noteBottomPt + 8),
         bottomPt: 478,
         maxW: PAGE_W - 58,
-        size: 9,
-        font: fontFor("checklist", "semiBold"),
+        size: 8.5,
+        font: fontFor("checklist", "regular"),
       });
     }
     if (includedItems.length > 0 || excludedItems.length > 0 || bottomNotes.length > 0) {
@@ -992,7 +1013,7 @@ async function appendDetailPages(
   const SIZE = 9;
   const LINE_H = SIZE * 1.3;
   const ITEM_GAP = 3.5;
-  const BULLET_W = o.semiBold.widthOfTextAtSize("•  ", SIZE);
+  const BULLET_W = o.regular.widthOfTextAtSize("•  ", SIZE);
   const LIST_TOP = 168;     // top-down dari tepi atas page (pt)
   const LIST_BOTTOM = 470;  // di atas garis footer
   const textW = COL_W - BULLET_W;
@@ -1002,7 +1023,7 @@ async function appendDetailPages(
     { items: clean(o.included), x: MARGIN, color: DETAIL_GREEN, title: "Sudah Termasuk" },
     { items: clean(o.excluded), x: MARGIN + COL_W + COL_GAP, color: DETAIL_RED, title: "Belum Termasuk" },
   ].map((c) => {
-    const wrapped = c.items.map((t) => wrapAtSize(t, o.semiBold, SIZE, textW));
+    const wrapped = c.items.map((t) => wrapAtSize(t, o.regular, SIZE, textW));
     const heights = wrapped.map((l) => l.length * LINE_H + ITEM_GAP);
     return { ...c, wrapped, heights, pages: paginateItems(heights, LIST_BOTTOM - LIST_TOP) };
   });
@@ -1016,7 +1037,7 @@ async function appendDetailPages(
     ...cols.map((c) => (c.pages[listPages - 1] ?? []).reduce((sum, i) => sum + c.heights[i], 0)),
   );
   const NOTES_HEAD_H = 22;
-  const notesLines = notes.map((t) => wrapAtSize(t, o.semiBold, SIZE, PAGE_W - MARGIN * 2 - BULLET_W).length);
+  const notesLines = notes.map((t) => wrapAtSize(t, o.regular, SIZE, PAGE_W - MARGIN * 2 - BULLET_W).length);
   const notesH = notesLines.reduce((sum, n) => sum + n * LINE_H + ITEM_GAP, 0) + NOTES_HEAD_H;
   const notesFitOnLastListPage = listPages > 0 && usedOnLastListPage + 14 + notesH <= LIST_BOTTOM;
   const pageCount = listPages + (notes.length > 0 && !notesFitOnLastListPage ? 1 : 0);
@@ -1084,8 +1105,8 @@ async function appendDetailPages(
           const lines = c.wrapped[idx];
           lines.forEach((ln, li) => {
             const y = yTop(cursor + li * LINE_H + SIZE * 0.85);
-            if (li === 0) page.drawText("•", { x: c.x + 4, y, size: SIZE, font: o.semiBold, color: DARK });
-            page.drawText(ln, { x: c.x + 4 + BULLET_W, y, size: SIZE, font: o.semiBold, color: DARK });
+            if (li === 0) page.drawText("•", { x: c.x + 4, y, size: SIZE, font: o.regular, color: DARK });
+            page.drawText(ln, { x: c.x + 4 + BULLET_W, y, size: SIZE, font: o.regular, color: DARK });
           });
           cursor += c.heights[idx];
         }
@@ -1107,7 +1128,7 @@ async function appendDetailPages(
         bottomPt: LIST_BOTTOM,
         maxW: PAGE_W - MARGIN * 2 - 4,
         size: SIZE,
-        font: o.semiBold,
+        font: o.regular,
       });
     }
   }
