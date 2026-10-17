@@ -1183,13 +1183,13 @@ export function PdfLayoutTuner({ config, mode = "private", onChange, onClose }: 
           </h4>
           <SliderRow
             label="X Position"
-            value={local.pricingNote?.xPx ?? 47}
+            value={local.pricingNote?.xPx ?? 53}
             min={20} max={700} step={1} unit="px"
             onChange={(v) =>
               setLocal((prev) => ({
                 ...prev,
                 pricingNote: {
-                  ...(prev.pricingNote ?? { xPx: 47, topPx: 657, size: 7.5, align: "left", maxWidthPx: 646 }),
+                  ...(prev.pricingNote ?? { xPx: 53, topPx: 632, size: 7.5, align: "left", maxWidthPx: 646 }),
                   xPx: v,
                 },
               }))
@@ -1202,7 +1202,7 @@ export function PdfLayoutTuner({ config, mode = "private", onChange, onClose }: 
               setLocal((prev) => ({
                 ...prev,
                 pricingNote: {
-                  ...(prev.pricingNote ?? { xPx: 47, topPx: 657, size: 7.5, align: "left", maxWidthPx: 646 }),
+                  ...(prev.pricingNote ?? { xPx: 53, topPx: 632, size: 7.5, align: "left", maxWidthPx: 646 }),
                   align: v,
                 },
               }))
@@ -1210,13 +1210,13 @@ export function PdfLayoutTuner({ config, mode = "private", onChange, onClose }: 
           />
           <SliderRow
             label="Y Position"
-            value={local.pricingNote?.topPx ?? 657}
+            value={local.pricingNote?.topPx ?? 632}
             min={550} max={780} step={1} unit="px"
             onChange={(v) =>
               setLocal((prev) => ({
                 ...prev,
                 pricingNote: {
-                  ...(prev.pricingNote ?? { xPx: 47, topPx: 657, size: 7.5, align: "left", maxWidthPx: 646 }),
+                  ...(prev.pricingNote ?? { xPx: 53, topPx: 632, size: 7.5, align: "left", maxWidthPx: 646 }),
                   topPx: v,
                 },
               }))
@@ -1230,7 +1230,7 @@ export function PdfLayoutTuner({ config, mode = "private", onChange, onClose }: 
               setLocal((prev) => ({
                 ...prev,
                 pricingNote: {
-                  ...(prev.pricingNote ?? { xPx: 47, topPx: 657, size: 7.5, align: "left", maxWidthPx: 646 }),
+                  ...(prev.pricingNote ?? { xPx: 53, topPx: 632, size: 7.5, align: "left", maxWidthPx: 646 }),
                   size: v,
                 },
               }))
@@ -1244,7 +1244,7 @@ export function PdfLayoutTuner({ config, mode = "private", onChange, onClose }: 
               setLocal((prev) => ({
                 ...prev,
                 pricingNote: {
-                  ...(prev.pricingNote ?? { xPx: 47, topPx: 657, size: 7.5, align: "left", maxWidthPx: 646 }),
+                  ...(prev.pricingNote ?? { xPx: 53, topPx: 632, size: 7.5, align: "left", maxWidthPx: 646 }),
                   maxWidthPx: v,
                 },
               }))

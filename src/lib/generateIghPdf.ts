@@ -182,8 +182,48 @@ function drawTextAligned(
 /** Area disclaimer statis "* Harga sewaktu-waktu…" di template private (pt,
  *  top-down dari tepi atas page). */
 const STATIC_DISCLAIMER_PT = { left: 26, right: 388, top: 333, bottom: 347 };
+/** Kotak oranye Pax & Harga di template private (pt, top-down). */
+const PRIVATE_PAX_BOX_PT = { left: 26.0, top: 289.8, right: 90.6, bottom: 325.3 };
+const PRIVATE_PRICE_BOX_PT = { left: 152.3, top: 289.8, right: 380.4, bottom: 325.3 };
+
+/** Baris bernomor 01–05 di bawah pill Sudah/Belum Termasuk (pt, top-down).
+ *  `centersPt` = titik tengah vertikal tiap nomor; `left`/`right` = x awal
+ *  teks (sesudah nomor) & batas kanan garis tiap kolom. */
+type ListRows = { centersPt: number[]; left: { x: number; maxX: number }; right: { x: number; maxX: number } };
+const PRIVATE_LIST_ROWS: ListRows = {
+  centersPt: [404.4, 419.8, 435.9, 450.6, 465.3],
+  left: { x: 50, maxX: 183 },
+  right: { x: 254, maxX: 386.5 },
+};
+const GROUP_LIST_ROWS: ListRows = {
+  centersPt: [420.0, 432.7, 445.85, 457.9, 470.0],
+  left: { x: 46, maxX: 193.5 },
+  right: { x: 240, maxX: 387.5 },
+};
+
+/** Satu item per baris template, rata kiri sesudah nomor, di tengah vertikal
+ *  baris (gak nempel garis). Item kepanjangan dipotong "…". */
+function drawTemplateRows(
+  page: PDFPage,
+  items: string[],
+  centersPt: number[],
+  col: { x: number; maxX: number },
+  font: PDFFont,
+  size: number,
+) {
+  const cleaned = items.map((s) => s.trim()).filter(Boolean).slice(0, centersPt.length);
+  cleaned.forEach((item, i) => {
+    const text = truncateToWidth(item, font, size, col.maxX - col.x);
+    // Baseline = tengah baris + setengah tinggi huruf (cap ≈ 0.7em).
+    const y = PAGE_H - (centersPt[i] + size * 0.42);
+    page.drawText(text, { x: col.x, y, size, font, color: DARK });
+  });
+}
+
 /** Garis pemisah di bawah judul/tanggal pada template private (pt, top-down). */
 const TITLE_DIVIDER_PT = 195.6;
+/** Baseline teks instagram/email di footer template (pt, top-down). */
+const FOOTER_TEXT_BASELINE_PT = 503.66;
 /** Garis horizontal di atas footer template (pt, top-down). */
 const FOOTER_RULE_PT = 486;
 
@@ -744,8 +784,20 @@ export async function buildIghPdf(data: IghPdfData, layout?: Partial<IghLayoutCo
   } else {
     // Private template: 2 kotak orange (Pax + Harga per Pax).
     const priceBold = fontFor("pricing", "bold");
-    const PAX_BOX = { leftPx: cfg.pricing.paxXPx, topPx: cfg.pricing.topPx, widthPx: 114, heightPx: 61 };
-    const PRICE_BOX = { leftPx: cfg.pricing.priceXPx, topPx: cfg.pricing.topPx, widthPx: 406, heightPx: 61 };
+    // Template bawaan: pakai geometri kotak oranye yg persis (diukur dari PDF
+    // template) + tanpa yOffset, supaya angka benar-benar di tengah kotak.
+    // Custom template tetap ikut posisi dari Tuner.
+    const builtinBox = !cfg.customTemplate;
+    const boxPx = (b: { left: number; top: number; right: number; bottom: number }) => ({
+      leftPx: b.left / SCALE, topPx: b.top / SCALE, widthPx: (b.right - b.left) / SCALE, heightPx: (b.bottom - b.top) / SCALE,
+    });
+    const PAX_BOX = builtinBox
+      ? boxPx(PRIVATE_PAX_BOX_PT)
+      : { leftPx: cfg.pricing.paxXPx, topPx: cfg.pricing.topPx, widthPx: 114, heightPx: 61 };
+    const PRICE_BOX = builtinBox
+      ? boxPx(PRIVATE_PRICE_BOX_PT)
+      : { leftPx: cfg.pricing.priceXPx, topPx: cfg.pricing.topPx, widthPx: 406, heightPx: 61 };
+    const priceYOffset = builtinBox ? 0 : cfg.pricing.yOffsetPdf;
     const paxText = pick(cfg.pricing.paxText, String(Math.max(0, data.pax || 0)));
     // Convert IDR price-per-pax → target PDF currency (USD/IDR/SAR).
     const targetCur = cfg.pdfCurrency ?? "IDR"; // legacy default for private = IDR
@@ -763,11 +815,11 @@ export async function buildIghPdf(data: IghPdfData, layout?: Partial<IghLayoutCo
     );
     drawTextCentered(page, paxText, {
       ...PAX_BOX, size: cfg.pricing.size + 4, minSize: 14, font: priceBold, color: WHITE,
-      yOffsetPdf: cfg.pricing.yOffsetPdf,
+      yOffsetPdf: priceYOffset,
     });
     drawTextCentered(page, priceText, {
       ...PRICE_BOX, size: cfg.pricing.size, minSize: 12, font: priceBold, color: WHITE,
-      yOffsetPdf: cfg.pricing.yOffsetPdf,
+      yOffsetPdf: priceYOffset,
     });
   }
 
@@ -777,11 +829,11 @@ export async function buildIghPdf(data: IghPdfData, layout?: Partial<IghLayoutCo
   // ditutup supaya catatan user menggantikannya, bukan saling timpa.
   let noteBottomPt = 0;
   if (data.pricingNote?.trim()) {
-    const pNote = cfg.pricingNote ?? { xPx: 47, topPx: 657, size: 7.5, align: "left", maxWidthPx: 646 };
+    const pNote = cfg.pricingNote ?? { xPx: 53, topPx: 632, size: 7.5, align: "left", maxWidthPx: 646 };
     const noteFont = fontFor(cfg.fonts.overrides?.pricingNote ? "pricingNote" : "pricing", "regular");
     // Batas bawah: pill "Sudah/Belum Termasuk" (layout lama) atau maksimal 4 baris.
     const pillTopPt = twoPage ? Infinity : isGroup ? 390 : 369;
-    // Layout lama private: posisi default (657px ≈ 367pt) mepet pill dan gak
+    // Layout lama private: posisi lama (657px ≈ 367pt) mepet pill dan gak
     // ada ruang buat wrap → pakai slot disclaimer statis (ditutup di bawah).
     let noteTopPt = pNote.topPx * SCALE;
     if (!twoPage && !isGroup && noteTopPt > STATIC_DISCLAIMER_PT.bottom - 2 && noteTopPt < pillTopPt + 20) {
@@ -824,6 +876,7 @@ export async function buildIghPdf(data: IghPdfData, layout?: Partial<IghLayoutCo
         font: fontFor("footer", "semiBold"),
         displayNumber: formatWhatsappDisplay(admin.adminWhatsapp),
         url: whatsappUrl(admin.adminWhatsapp),
+        alignToTemplate: cfg.customTemplate ? undefined : { baselineTopPt: FOOTER_TEXT_BASELINE_PT, centerXPt: PAGE_W / 2 },
       });
     }
   }
@@ -840,7 +893,7 @@ export async function buildIghPdf(data: IghPdfData, layout?: Partial<IghLayoutCo
     // Halaman 2: daftar lengkap + poin tambahan bawah.
     if (topNotes.length > 0) {
       drawBulletBlock(page, topNotes, {
-        x: 29,
+        x: 29.5,
         topPt: Math.max(!isGroup && !data.pricingNote?.trim() ? 366 : 392, noteBottomPt + 8),
         bottomPt: 478,
         maxW: PAGE_W - 58,
@@ -887,20 +940,29 @@ export async function buildIghPdf(data: IghPdfData, layout?: Partial<IghLayoutCo
       .map((x) => truncateToWidth(x, listFont, cfg.checklist.size, lineW));
     return [...head, `+${cleaned.length - head.length} poin lainnya (hal. 2)`];
   };
-  drawList(
-    page, summarize(includedItems),
-    firstBaselinePxResolved, cfg.checklist.rowSpacingPx, MAX_LIST_ROWS,
-    cfg.checklist.leftXPx, listFont, cfg.checklist.size,
-    cfg.checklist.sudahTermasukAlign ?? "center", bulletSymbol,
-    footerCutoffPx,
-  );
-  drawList(
-    page, summarize(excludedItems),
-    firstBaselinePxResolved, cfg.checklist.rowSpacingPx, MAX_LIST_ROWS,
-    cfg.checklist.rightXPx, listFont, cfg.checklist.size,
-    cfg.checklist.belumTermasukAlign ?? "center", bulletSymbol,
-    footerCutoffPx,
-  );
+  if (!cfg.customTemplate) {
+    // Template bawaan: tiap item ditaruh persis di baris bernomor 01–05,
+    // rata kiri setelah nomor & di tengah vertikal antar garis.
+    const rows = isGroup ? GROUP_LIST_ROWS : PRIVATE_LIST_ROWS;
+    const rowSize = Math.min(cfg.checklist.size, 9);
+    drawTemplateRows(page, summarize(includedItems), rows.centersPt, rows.left, listFont, rowSize);
+    drawTemplateRows(page, summarize(excludedItems), rows.centersPt, rows.right, listFont, rowSize);
+  } else {
+    drawList(
+      page, summarize(includedItems),
+      firstBaselinePxResolved, cfg.checklist.rowSpacingPx, MAX_LIST_ROWS,
+      cfg.checklist.leftXPx, listFont, cfg.checklist.size,
+      cfg.checklist.sudahTermasukAlign ?? "center", bulletSymbol,
+      footerCutoffPx,
+    );
+    drawList(
+      page, summarize(excludedItems),
+      firstBaselinePxResolved, cfg.checklist.rowSpacingPx, MAX_LIST_ROWS,
+      cfg.checklist.rightXPx, listFont, cfg.checklist.size,
+      cfg.checklist.belumTermasukAlign ?? "center", bulletSymbol,
+      footerCutoffPx,
+    );
+  }
 
   if (needsDetailPage) {
     await appendDetailPages(pdf, {
@@ -1153,16 +1215,25 @@ function drawWhatsappFooter(
     font: PDFFont;
     displayNumber: string;
     url: string;
+    /** Template bawaan: baseline teks disamakan dgn instagram/email (pt,
+     *  top-down) & blok icon+nomor di-tengah halaman. Override topPx/leftXPx. */
+    alignToTemplate?: { baselineTopPt: number; centerXPt: number };
   },
 ) {
-  const baseX = opts.leftXPx * SCALE;
+  const gap = 4;
+  const textWidth = opts.font.widthOfTextAtSize(opts.displayNumber, opts.textSizePt);
+  const baseX = opts.alignToTemplate
+    ? opts.alignToTemplate.centerXPt - (opts.iconSizePt + gap + textWidth) / 2
+    : opts.leftXPx * SCALE;
   // Konversi top-px → PDF baseline. IG di template baseline ~yMin=498pt
   // (pdftotext, top-down). Pakai konversi standar pxRect agar konsisten
   // dengan elemen lain.
   const baseY = PAGE_H - opts.topPx * SCALE;
   const r = opts.iconSizePt / 2;
   const cx = baseX + r;
-  const cy = baseY + r * 0.4; // sedikit naik supaya optical-center sejajar teks
+  const cy = opts.alignToTemplate
+    ? PAGE_H - opts.alignToTemplate.baselineTopPt + opts.textSizePt * 0.32
+    : baseY + r * 0.4; // sedikit naik supaya optical-center sejajar teks
 
   // 1) Bubble hijau WhatsApp (lingkaran filled).
   page.drawCircle({ x: cx, y: cy, size: r, color: WA_GREEN, borderWidth: 0 });
@@ -1194,7 +1265,6 @@ function drawWhatsappFooter(
   });
 
   // 3) Nomor WA di kanan icon.
-  const gap = 4;
   const textX = cx + r + gap;
   // Vertical center text relative to icon — gunakan cap-height approx 0.7 size.
   const textY = cy - opts.textSizePt * 0.32;
@@ -1207,7 +1277,6 @@ function drawWhatsappFooter(
   });
 
   // 4) Clickable link annotation menutupi seluruh icon + teks.
-  const textWidth = opts.font.widthOfTextAtSize(opts.displayNumber, opts.textSizePt);
   const annotX1 = baseX;
   const annotY1 = cy - r - 1;
   const annotX2 = textX + textWidth + 1;

@@ -324,7 +324,7 @@ export const DEFAULT_IGH_LAYOUT: IghLayoutConfig = {
   subtitleFontSize: 9,
   dateDisplayMode: "Short",
   priceDisplayMode: "compact",
-  pricingNote: { xPx: 47, topPx: 657, size: 7.5, align: "left", maxWidthPx: 646 },
+  pricingNote: { xPx: 53, topPx: 632, size: 7.5, align: "left", maxWidthPx: 646 },
 };
 
 const STORAGE_KEY = "igh:pdf-layout-config";
@@ -403,7 +403,7 @@ export const GROUP_LAYOUT: IghLayoutConfig = {
   subtitleFontSize: 9,
   dateDisplayMode: "Short",
   priceDisplayMode: "compact",
-  pricingNote: { xPx: 47, topPx: 657, size: 7.5, align: "left", maxWidthPx: 646 },
+  pricingNote: { xPx: 53, topPx: 632, size: 7.5, align: "left", maxWidthPx: 646 },
 };
 
 /** Built-in starter buat template Grup, dikalibrasi 1:1 ke kicau.jpg.
@@ -572,7 +572,7 @@ export function mergeConfig(
         ? (override as { priceDisplayMode?: "full" | "compact" }).priceDisplayMode ?? base.priceDisplayMode ?? "compact"
         : base.priceDisplayMode ?? "compact",
     pricingNote: override.pricingNote
-      ? { ...(base.pricingNote ?? { xPx: 47, topPx: 657, size: 7.5, align: "left", maxWidthPx: 646 }), ...override.pricingNote }
-      : base.pricingNote ?? { xPx: 47, topPx: 657, size: 7.5, align: "left", maxWidthPx: 646 },
+      ? { ...(base.pricingNote ?? { xPx: 53, topPx: 632, size: 7.5, align: "left", maxWidthPx: 646 }), ...override.pricingNote }
+      : base.pricingNote ?? { xPx: 53, topPx: 632, size: 7.5, align: "left", maxWidthPx: 646 },
   };
 }

@@ -309,7 +309,7 @@ function buildElements(
 
   // ── Pricing Note (Catatan Tambahan) ──
   {
-    const pn = layout.pricingNote ?? { xPx: 47, topPx: 657, size: 7.5, align: "left", maxWidthPx: 646 };
+    const pn = layout.pricingNote ?? { xPx: 53, topPx: 632, size: 7.5, align: "left", maxWidthPx: 646 };
     els.push({
       key: "pricingNote",
       label: "Catatan Tambahan",
@@ -457,7 +457,7 @@ function applyTranslate(
       };
       break;
     case "pricingNote": {
-      const cur = layout.pricingNote ?? { xPx: 47, topPx: 657, size: 7.5, align: "left", maxWidthPx: 646 };
+      const cur = layout.pricingNote ?? { xPx: 53, topPx: 632, size: 7.5, align: "left", maxWidthPx: 646 };
       next.pricingNote = {
         ...cur,
         xPx: cur.xPx + dxPx,
@@ -509,7 +509,7 @@ function applyResize(
       next.groupPricing = { ...layout.groupPricing, size: clamped };
       break;
     case "pricingNote": {
-      const cur = layout.pricingNote ?? { xPx: 47, topPx: 657, size: 7.5, align: "left", maxWidthPx: 646 };
+      const cur = layout.pricingNote ?? { xPx: 53, topPx: 632, size: 7.5, align: "left", maxWidthPx: 646 };
       next.pricingNote = { ...cur, size: clamped };
       break;
     }
