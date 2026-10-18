@@ -10,6 +10,8 @@ import {
 } from "@/components/ui/select";
 import { AlignCenter, AlignLeft, AlignRight, Bookmark, ClipboardCopy, FileImage, Loader2, Pencil, RotateCcw, Save, Trash2, Upload, X } from "lucide-react";
 import { toast } from "sonner";
+import { effectiveWhatsappPosition } from "@/lib/ighWhatsappPosition";
+import { WA_DEFAULT_POS } from "@/lib/ighPdfConfig";
 import { uploadPdfTemplate, removePdfTemplate } from "@/lib/supabaseStorage";
 import {
   BUILTIN_PRESET,
@@ -166,6 +168,8 @@ function TextRow({ label, value, placeholder, multiline, onChange }: TextRowProp
 
 export function PdfLayoutTuner({ config, mode = "private", onChange, onClose }: Props) {
   const [local, setLocal] = useState<IghLayoutConfig>(config);
+  // Posisi WA efektif (termasuk mode auto-tengah) buat slider di bawah.
+  const waPos = effectiveWhatsappPosition(local, mode);
   const [cloudPresets, setCloudPresets] = useState<IghLayoutPreset[]>(() => loadPresetsCache());
   const [activePresetId, setActivePresetId] = useState<string | "">("");
   const [presetName, setPresetName] = useState("");
@@ -259,7 +263,8 @@ export function PdfLayoutTuner({ config, mode = "private", onChange, onClose }: 
       cancelled = true;
       off();
     };
-  }, []);
+    // Re-pull saat mode ganti (Private ↔ Grup) supaya config cloud mode itu kebaca.
+  }, [mode]);
 
   function handleApplyPreset(id: string) {
     setActivePresetId(id);
@@ -1084,7 +1089,8 @@ export function PdfLayoutTuner({ config, mode = "private", onChange, onClose }: 
             onChange={(v) => patch("pricing", { yOffsetPdf: v })}
           />
           <p className="text-[9px] text-slate-400 leading-snug">
-            Negatif = naik, positif = turun. Tuning visual center kotak orange.
+            0 = angka pas di tengah kotak oranye. Positif = naik, negatif = turun.
+            Ukuran kotak mengikuti kotak oranye template; X/Y menggeser posisinya.
           </p>
         </section>
 
@@ -1275,25 +1281,25 @@ export function PdfLayoutTuner({ config, mode = "private", onChange, onClose }: 
             onChange={(v) => patch("checklist", { excludedText: v })}
           />
           <SliderRow
-            label={`X Kolom Kiri — anchor ${(local.checklist.sudahTermasukAlign ?? "center") === "left" ? "(tepi kiri teks)" : (local.checklist.sudahTermasukAlign ?? "center") === "right" ? "(tepi kanan teks)" : "(tengah teks)"}`}
+            label={`X Kolom Kiri — anchor ${(local.checklist.sudahTermasukAlign ?? "left") === "left" ? "(tepi kiri teks)" : (local.checklist.sudahTermasukAlign ?? "left") === "right" ? "(tepi kanan teks)" : "(tengah teks)"}`}
             value={local.checklist.leftXPx}
             min={20} max={320} step={1} unit="px"
             onChange={(v) => patch("checklist", { leftXPx: v })}
           />
           <AlignRow
             label="Alignment Sudah Termasuk"
-            value={local.checklist.sudahTermasukAlign ?? "center"}
+            value={local.checklist.sudahTermasukAlign ?? "left"}
             onChange={(v) => patch("checklist", { sudahTermasukAlign: v })}
           />
           <SliderRow
-            label={`X Kolom Kanan — anchor ${(local.checklist.belumTermasukAlign ?? "center") === "left" ? "(tepi kiri teks)" : (local.checklist.belumTermasukAlign ?? "center") === "right" ? "(tepi kanan teks)" : "(tengah teks)"}`}
+            label={`X Kolom Kanan — anchor ${(local.checklist.belumTermasukAlign ?? "left") === "left" ? "(tepi kiri teks)" : (local.checklist.belumTermasukAlign ?? "left") === "right" ? "(tepi kanan teks)" : "(tengah teks)"}`}
             value={local.checklist.rightXPx}
             min={350} max={720} step={1} unit="px"
             onChange={(v) => patch("checklist", { rightXPx: v })}
           />
           <AlignRow
             label="Alignment Belum Termasuk"
-            value={local.checklist.belumTermasukAlign ?? "center"}
+            value={local.checklist.belumTermasukAlign ?? "left"}
             onChange={(v) => patch("checklist", { belumTermasukAlign: v })}
           />
           <TextRow
@@ -1305,7 +1311,7 @@ export function PdfLayoutTuner({ config, mode = "private", onChange, onClose }: 
           <SliderRow
             label="Y Baris Pertama"
             value={local.checklist.firstBaselinePx}
-            min={690} max={740} step={1} unit="px"
+            min={650} max={820} step={1} unit="px"
             onChange={(v) => patch("checklist", { firstBaselinePx: v })}
           />
           <SliderRow
@@ -1327,8 +1333,15 @@ export function PdfLayoutTuner({ config, mode = "private", onChange, onClose }: 
             onChange={(v) => patch("checklist", { size: v })}
           />
           <p className="text-[9px] text-slate-400 leading-snug">
-            Y Offset menggeser semua teks naik/turun supaya pas di tengah dua garis.
+            Berlaku kalau daftar ada di halaman 1 (opsi "daftar di halaman 2" mati, atau pakai custom template).
           </p>
+          {!local.customTemplate && (
+            <p className="text-[9px] text-slate-400 leading-snug">
+              Template bawaan: tiap item otomatis ditaruh di baris bernomor 01–05, di tengah antar garis.
+              Slider X / Y / Row Gap / Y Offset menggeser dari posisi itu; Alignment berlaku di dalam baris.
+              Simbol list tidak dipakai karena nomor sudah tercetak.
+            </p>
+          )}
         </section>
 
         {/* FOOTER WHATSAPP — posisi icon hijau + nomor admin di footer.
@@ -1339,36 +1352,41 @@ export function PdfLayoutTuner({ config, mode = "private", onChange, onClose }: 
             Footer WhatsApp
           </h4>
           <SliderRow
-            label="X WhatsApp"
-            value={local.whatsappPosition?.xPx ?? local.footer.waXPx}
+            label={waPos.auto ? "X WhatsApp (auto tengah)" : "X WhatsApp"}
+            value={Math.round(waPos.xPx)}
             min={40} max={680} step={1} unit="px"
             onChange={(v) =>
               setLocal((prev) => ({
                 ...prev,
-                whatsappPosition: {
-                  xPx: v,
-                  yPx: prev.whatsappPosition?.yPx ?? prev.footer.topPx,
-                },
+                // Mulai dari posisi efektif supaya gak loncat saat keluar dari auto.
+                whatsappPosition: { xPx: v, yPx: Math.round(effectiveWhatsappPosition(prev, mode).yPx * 10) / 10 },
               }))
             }
           />
           <SliderRow
-            label="Y WhatsApp"
-            value={local.whatsappPosition?.yPx ?? local.footer.topPx}
+            label={waPos.auto ? "Y WhatsApp (auto segaris footer)" : "Y WhatsApp"}
+            value={Math.round(waPos.yPx)}
             min={700} max={1010} step={1} unit="px"
             onChange={(v) =>
               setLocal((prev) => ({
                 ...prev,
-                whatsappPosition: {
-                  xPx: prev.whatsappPosition?.xPx ?? prev.footer.waXPx,
-                  yPx: v,
-                },
+                whatsappPosition: { xPx: Math.round(effectiveWhatsappPosition(prev, mode).xPx * 10) / 10, yPx: v },
               }))
             }
           />
+          {!local.customTemplate && (
+            <button
+              type="button"
+              disabled={waPos.auto}
+              onClick={() => setLocal((prev) => ({ ...prev, whatsappPosition: { ...WA_DEFAULT_POS } }))}
+              className="w-full h-6 rounded-md text-[10px] font-bold text-slate-600 bg-slate-100 hover:bg-slate-200 disabled:opacity-50 disabled:cursor-default transition-colors"
+            >
+              {waPos.auto ? "Posisi otomatis aktif" : "Kembalikan ke posisi otomatis"}
+            </button>
+          )}
           <p className="text-[9px] text-slate-400 leading-snug">
-            Y default <strong>891px</strong> sejajar dengan teks Instagram pre-printed.
-            Geser sampai mendekati <strong>1010px</strong> kalau mau ke batas bawah.
+            Template bawaan: selama belum digeser, WA otomatis di tengah dan segaris dengan
+            teks Instagram/email. Geser slider atau drag di Edit Mode untuk posisi manual.
           </p>
         </section>
       </div>

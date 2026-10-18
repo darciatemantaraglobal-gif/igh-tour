@@ -1,5 +1,12 @@
 import { useEffect, useMemo, useRef, useState } from "react";
-import type { IghLayoutConfig, IghLayoutMode } from "@/lib/ighPdfConfig";
+import {
+  PRICE_BOX_PX,
+  TPL_SCALE,
+  resolveListRows,
+  type IghLayoutConfig,
+  type IghLayoutMode,
+} from "@/lib/ighPdfConfig";
+import { effectiveWhatsappPosition, waNumberWidthPt } from "@/lib/ighWhatsappPosition";
 
 /**
  * Overlay drag-and-resize ala Canva di atas preview PDF.
@@ -98,28 +105,57 @@ function wrapText(text: string, maxWidthPx: number, sizePt: number, weight = "bo
   return result;
 }
 
-/** Hitung jumlah baris projectName: split('\n') dulu (manual line break dari
- *  user), lalu auto-wrap tiap segmen. Sinkron dgn generator (MAX 4 baris). */
-function projectNameLineCount(text: string, baseSize: number): number {
-  if (!text || !text.trim()) return 1;
-  const PROJ_MAX_W_TPL = 285; // template-px, sesuai generator
-  const MAX_LINES = 4; // sinkron dgn generateIghPdf MAX_TITLE_LINES
-  const segments = text.split("\n");
-  let size = baseSize;
-  while (size > 14) {
-    let total = 0;
-    for (const seg of segments) {
-      if (!seg.trim()) {
-        total += 1; // empty manual line tetep advance Y
-        continue;
-      }
-      const lines = wrapText(seg, PROJ_MAX_W_TPL, size);
-      total += Math.max(1, lines.length);
-    }
-    if (total <= MAX_LINES) return Math.max(1, total);
-    size -= 1;
+/** Garis pemisah di bawah judul pada template private (pt) — sinkron generator. */
+const TITLE_DIVIDER_PT = 195.6;
+
+/** Replikasi auto-fit judul di generator: lebar maks (private: berhenti
+ *  sebelum kolom Invoice), shrink sampai judul + tanggal muat di atas garis
+ *  pemisah, lalu batasi jumlah baris. Return ukuran & jumlah baris final. */
+function fitProjectTitle(
+  layout: IghLayoutConfig,
+  mode: IghLayoutMode,
+  text: string,
+): { lines: number; size: number; maxWPx: number } {
+  const isGroup = mode === "group";
+  const maxWPx = isGroup ? 285 : Math.min(285, layout.metaInfo.customerXPx - layout.projectName.xPx - 16);
+  const MAX_LINES = 4;
+  const MIN_SIZE = 13;
+  const lineAdv = (sz: number) => sz * 1.05 * PT_TO_TPL_PX + layout.projectName.lineGapPx;
+  const bottomPx = !isGroup && !layout.customTemplate ? TITLE_DIVIDER_PT / TPL_SCALE - 6 : Infinity;
+  const gapPx = layout.mainHeaderGap ?? layout.headerSubtitleGap ?? 6;
+  const subH = (layout.subtitleFontSize ?? 11) * 1.25 * PT_TO_TPL_PX;
+  const segments = (text || "—").split("\n");
+  let size = layout.projectName.size;
+  let total = 1;
+  for (;;) {
+    total = 0;
+    for (const seg of segments) total += seg.trim() ? Math.max(1, wrapText(seg, maxWPx, size).length) : 1;
+    const blockH = total * lineAdv(size) + gapPx + subH;
+    if (total <= MAX_LINES && layout.projectName.topPx + blockH <= bottomPx) break;
+    if (size <= MIN_SIZE) break;
+    size = Math.max(MIN_SIZE, size - 0.5);
   }
-  return MAX_LINES;
+  const room = bottomPx - layout.projectName.topPx - gapPx - subH;
+  const maxLines = Math.max(1, Math.min(MAX_LINES, Math.floor(room / lineAdv(size))));
+  return { lines: Math.min(total, maxLines), size, maxWPx };
+}
+
+/** Posisi Y efektif Catatan Tambahan (template-px), sinkron generator: di
+ *  layout lama private (template bawaan), catatan yg gak muat sebelum pill
+ *  "Sudah Termasuk" dinaikkan ke slot disclaimer statis (335.5pt). */
+function effectiveNoteTopPx(
+  layout: IghLayoutConfig,
+  mode: IghLayoutMode,
+  text: string,
+  listOnPage1: boolean,
+): number {
+  const pn = layout.pricingNote ?? { xPx: 53, topPx: 632, size: 7.5, align: "left", maxWidthPx: 646 };
+  const topPt = pn.topPx * TPL_SCALE;
+  // Angka-angka di bawah = STATIC_DISCLAIMER_PT (333–347pt) & pill (369pt) di generator.
+  if (!listOnPage1 || mode === "group" || layout.customTemplate || !text.trim()) return pn.topPx;
+  if (topPt <= 345 || topPt >= 389) return pn.topPx;
+  const lines = text.trim().split(/\r?\n/).reduce((n, para) => n + wrapText(para, pn.maxWidthPx ?? 646, pn.size, "normal").length, 0);
+  return topPt + lines * pn.size * 1.25 > 367 ? 335.5 / TPL_SCALE : pn.topPx;
 }
 
 type ElementKey =
@@ -153,6 +189,7 @@ function buildElements(
   mode: IghLayoutMode,
   projectNameText: string,
   timelineText: string,
+  extra: { pricingNoteText?: string; listOnPage1?: boolean } = {},
 ): OverlayElement[] {
   const els: OverlayElement[] = [];
 
@@ -160,16 +197,19 @@ function buildElements(
   {
     const s = layout.projectName.size;
     const text = (layout.projectName.text?.trim() || projectNameText || "").trim();
-    const lines = projectNameLineCount(text, s);
+    // Ukuran/baris final = hasil auto-fit generator (bisa lebih kecil dari `s`).
+    const fit = fitProjectTitle(layout, mode, text);
+    const lines = fit.lines;
     // Per generator: lineAdvance = size*1.05 (pt→px) + lineGapPx (template-px)
-    const lineAdvance = s * 1.05 * PT_TO_TPL_PX + layout.projectName.lineGapPx;
-    const heightPx = (lines - 1) * lineAdvance + textBoxH(s);
+    const lineAdvance = fit.size * 1.05 * PT_TO_TPL_PX + layout.projectName.lineGapPx;
+    const heightPx = (lines - 1) * lineAdvance + textBoxH(fit.size);
+    const shrunk = fit.size < s;
     els.push({
       key: "projectName",
-      label: lines > 1 ? `Project Name (${lines} baris)` : "Project Name",
+      label: `Project Name${lines > 1 ? ` (${lines} baris)` : ""}${shrunk ? ` · auto ${fit.size}pt` : ""}`,
       xPx: layout.projectName.xPx,
-      yPx: textBoxY(layout.projectName.topPx, s),
-      widthPx: 285,
+      yPx: textBoxY(layout.projectName.topPx, fit.size),
+      widthPx: fit.maxWPx,
       heightPx,
       size: s,
     });
@@ -293,8 +333,8 @@ function buildElements(
     // Generator: PAX_BOX widthPx=114, PRICE_BOX widthPx=406, both heightPx=61, topPx=topPx
     const p = layout.pricing;
     const left = Math.min(p.paxXPx, p.priceXPx);
-    const paxRight = p.paxXPx + 114;
-    const priceRight = p.priceXPx + 406;
+    const paxRight = p.paxXPx + PRICE_BOX_PX.paxW;
+    const priceRight = p.priceXPx + PRICE_BOX_PX.priceW;
     const right = Math.max(paxRight, priceRight);
     els.push({
       key: "pricing",
@@ -302,7 +342,7 @@ function buildElements(
       xPx: left,
       yPx: p.topPx,
       widthPx: right - left,
-      heightPx: 61,
+      heightPx: PRICE_BOX_PX.h,
       size: p.size,
     });
   }
@@ -310,13 +350,17 @@ function buildElements(
   // ── Pricing Note (Catatan Tambahan) ──
   {
     const pn = layout.pricingNote ?? { xPx: 53, topPx: 632, size: 7.5, align: "left", maxWidthPx: 646 };
+    const noteText = (extra.pricingNoteText ?? "").trim();
+    const noteLines = noteText
+      ? noteText.split(/\r?\n/).reduce((n, para) => n + wrapText(para, pn.maxWidthPx ?? 646, pn.size, "normal").length, 0)
+      : 1;
     els.push({
       key: "pricingNote",
-      label: "Catatan Tambahan",
+      label: noteLines > 1 ? `Catatan Tambahan (${noteLines} baris)` : "Catatan Tambahan",
       xPx: pn.xPx,
-      yPx: textBoxY(pn.topPx, pn.size),
+      yPx: textBoxY(effectiveNoteTopPx(layout, mode, noteText, extra.listOnPage1 !== false), pn.size),
       widthPx: pn.maxWidthPx ?? 646,
-      heightPx: textBoxH(pn.size),
+      heightPx: (noteLines - 1) * pn.size * 1.25 * PT_TO_TPL_PX + textBoxH(pn.size),
       size: pn.size,
     });
   }
@@ -326,13 +370,16 @@ function buildElements(
   // whatsappPosition (fallback ke legacy footer.topPx/waXPx). Bbox kira-kira:
   // icon diameter (iconSizePt/SCALE) + 4pt gap + nomor (~80pt = ~143px).
   if (layout.footer.showWhatsapp) {
-    const waX = layout.whatsappPosition?.xPx ?? layout.footer.waXPx;
-    const waY = layout.whatsappPosition?.yPx ?? layout.footer.topPx;
-    const iconPx = layout.footer.waIconSizePt / 0.5594; // SCALE constant ≈ pt→tpl-px
-    const numWidthPx = 150; // approx untuk "+62 8XX-XXXX-XXXX" pada 7pt
+    // Posisi efektif = sama persis dgn generator (auto-center selama default).
+    const numWidthPt = waNumberWidthPt(layout);
+    const wa = effectiveWhatsappPosition(layout, mode);
+    const waX = wa.xPx;
+    const waY = wa.yPx;
+    const iconPx = layout.footer.waIconSizePt / TPL_SCALE;
+    const numWidthPx = numWidthPt / TPL_SCALE;
     els.push({
       key: "whatsapp",
-      label: "WhatsApp",
+      label: wa.auto ? "WhatsApp (auto tengah)" : "WhatsApp",
       // Top icon kira-kira 1.4× radius di atas baseline (cy = baseY + r*0.4)
       xPx: waX,
       yPx: waY - iconPx * 0.7,
@@ -343,7 +390,26 @@ function buildElements(
   }
 
   // ── Checklist — 5 baris, baselinePx = posisi BASELINE (bukan top!) ──
-  {
+  // Cuma tampil kalau daftar memang di halaman 1 (layout lama / custom template).
+  if (extra.listOnPage1 !== false && !layout.customTemplate) {
+    // Template bawaan: item nempel di baris bernomor 01–05 (lihat resolveListRows).
+    const rows = resolveListRows(layout, mode === "group");
+    const s = layout.checklist.size;
+    const half = (s * 0.7) / 2 + 3;
+    const first = rows.centersPt[0];
+    const last = rows.centersPt[rows.centersPt.length - 1];
+    const leftPt = Math.min(rows.left.x, rows.right.x);
+    const rightPt = Math.max(rows.left.maxX, rows.right.maxX);
+    els.push({
+      key: "checklist",
+      label: "Checklist (baris 01–05)",
+      xPx: leftPt / TPL_SCALE,
+      yPx: (first - half) / TPL_SCALE,
+      widthPx: (rightPt - leftPt) / TPL_SCALE,
+      heightPx: (last - first + 2 * half) / TPL_SCALE,
+      size: s,
+    });
+  } else if (extra.listOnPage1 !== false) {
     const c = layout.checklist;
     const s = c.size;
     // Cap-top untuk row pertama: baselinePx - 0.7*size/SCALE
@@ -374,6 +440,8 @@ function applyTranslate(
   key: ElementKey,
   dxPx: number,
   dyPx: number,
+  mode: IghLayoutMode = "private",
+  extra: { pricingNoteText?: string; listOnPage1?: boolean } = {},
 ): IghLayoutConfig {
   const next = { ...layout };
   switch (key) {
@@ -458,10 +526,12 @@ function applyTranslate(
       break;
     case "pricingNote": {
       const cur = layout.pricingNote ?? { xPx: 53, topPx: 632, size: 7.5, align: "left", maxWidthPx: 646 };
+      // Mulai dari posisi efektif (bisa sudah dinaikkan ke slot disclaimer).
+      const curTop = effectiveNoteTopPx(layout, mode, extra.pricingNoteText ?? "", extra.listOnPage1 !== false);
       next.pricingNote = {
         ...cur,
         xPx: cur.xPx + dxPx,
-        topPx: cur.topPx + dyPx,
+        topPx: curTop + dyPx,
       };
       break;
     }
@@ -469,8 +539,10 @@ function applyTranslate(
       // Drag WA = update whatsappPosition. Resolve current X/Y dari struktur baru
       // (whatsappPosition) atau fallback ke legacy footer fields supaya preset
       // lama tetap geser dari posisi visual yg user lihat sekarang, bukan dari 0.
-      const curX = layout.whatsappPosition?.xPx ?? layout.footer.waXPx;
-      const curY = layout.whatsappPosition?.yPx ?? layout.footer.topPx;
+      // Mulai dari posisi efektif (termasuk auto-center) supaya gak loncat.
+      const cur = effectiveWhatsappPosition(layout, mode);
+      const curX = cur.xPx;
+      const curY = cur.yPx;
       next.whatsappPosition = {
         xPx: curX + dxPx,
         yPx: curY + dyPx,
@@ -535,6 +607,11 @@ interface Props {
   /** Teks timeline (tanggal) dari kalkulator — buat ngitung tinggi bbox
    *  subtitle saat di-wrap multi-line. Default "" → bbox 1 baris. */
   timelineText?: string;
+  /** Teks catatan harga — buat tinggi bbox Catatan Tambahan (multi-baris). */
+  pricingNoteText?: string;
+  /** false = daftar Sudah/Belum Termasuk ada di halaman 2 → bbox checklist
+   *  di halaman 1 disembunyikan. */
+  listOnPage1?: boolean;
 }
 
 type DragState =
@@ -636,7 +713,7 @@ function applySnap(
   return { dx: outDx, dy: outDy, xGuides, yGuides };
 }
 
-export function PdfInteractiveOverlay({ layout, mode, onChange, imgRect, enabled, projectNameText = "", timelineText = "" }: Props) {
+export function PdfInteractiveOverlay({ layout, mode, onChange, imgRect, enabled, projectNameText = "", timelineText = "", pricingNoteText = "", listOnPage1 = true }: Props) {
   // Ghost layout dipakai cuma selama drag aktif. Null = pakai `layout`.
   const [ghost, setGhost] = useState<IghLayoutConfig | null>(null);
   const [selected, setSelected] = useState<Set<ElementKey>>(() => new Set());
@@ -655,12 +732,12 @@ export function PdfInteractiveOverlay({ layout, mode, onChange, imgRect, enabled
 
   const effective = ghost ?? layout;
   const elements = useMemo(
-    () => buildElements(effective, mode, projectNameText, timelineText),
-    [effective, mode, projectNameText, timelineText],
+    () => buildElements(effective, mode, projectNameText, timelineText, { pricingNoteText, listOnPage1 }),
+    [effective, mode, projectNameText, timelineText, pricingNoteText, listOnPage1],
   );
   const baseElements = useMemo(
-    () => buildElements(layout, mode, projectNameText, timelineText),
-    [layout, mode, projectNameText, timelineText],
+    () => buildElements(layout, mode, projectNameText, timelineText, { pricingNoteText, listOnPage1 }),
+    [layout, mode, projectNameText, timelineText, pricingNoteText, listOnPage1],
   );
 
   const scale = imgRect ? imgRect.width / TEMPLATE_WIDTH_PX : 0;
@@ -726,7 +803,7 @@ export function PdfInteractiveOverlay({ layout, mode, onChange, imgRect, enabled
         const hasBothHotel = st.keys.includes("hotelMakkah") && st.keys.includes("hotelMadinah");
         for (const k of st.keys) {
           const dyForKey = hasBothHotel && k === "hotelMadinah" ? 0 : dy;
-          next = applyTranslate(next, k, dx, dyForKey);
+          next = applyTranslate(next, k, dx, dyForKey, mode, { pricingNoteText, listOnPage1 });
         }
         setGhost(next);
       } else {
@@ -878,7 +955,7 @@ export function PdfInteractiveOverlay({ layout, mode, onChange, imgRect, enabled
       let next = layoutRef.current;
       for (const key of keys) {
         const dyForKey = hasBothHotel && key === "hotelMadinah" ? 0 : dy;
-        next = applyTranslate(next, key, dx, dyForKey);
+        next = applyTranslate(next, key, dx, dyForKey, mode, { pricingNoteText, listOnPage1 });
       }
       onChangeRef.current(next);
     };

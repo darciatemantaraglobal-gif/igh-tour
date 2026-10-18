@@ -10,6 +10,7 @@ import { requireAgencyId } from "@/store/authStore";
 import {
   mergeConfig,
   DEFAULT_IGH_LAYOUT,
+  MODE_DEFAULTS,
   savePresetsCache,
   type IghLayoutConfig,
   type IghLayoutMode,
@@ -219,7 +220,7 @@ const presetFromRow = (r: Record<string, unknown>): IghLayoutPreset => {
   return {
     id: String(r.id),
     name: String(r.name ?? ""),
-    config: mergeConfig(DEFAULT_IGH_LAYOUT, cfgRaw as Partial<IghLayoutConfig>),
+    config: mergeConfig(mode ? MODE_DEFAULTS[mode] : DEFAULT_IGH_LAYOUT, cfgRaw as Partial<IghLayoutConfig>),
     createdAt: Number.isFinite(created) ? created : Date.now(),
     updatedAt: Number.isFinite(updated) ? updated : Date.now(),
     mode,
@@ -323,7 +324,7 @@ export async function pullActiveLayoutConfig(
     if (error || !data) return null;
     const rawPayload = (data.payload as Record<string, unknown>) ?? {};
     const { [MODE_MARKER_KEY]: _mode, ...cfgRaw } = rawPayload;
-    return mergeConfig(DEFAULT_IGH_LAYOUT, cfgRaw as Partial<IghLayoutConfig>);
+    return mergeConfig(MODE_DEFAULTS[mode], cfgRaw as Partial<IghLayoutConfig>);
   } catch {
     return null;
   }

@@ -378,7 +378,9 @@ export function PdfPreviewDialog({ open, onOpenChange, data }: Props) {
         imgRect={imgRect}
         enabled={editMode && !!previewUrl}
         projectNameText={data.projectName}
-        timelineText={data.timeline}
+        timelineText={(layout.dateDisplayMode ?? "Short") === "Short" ? (data.timelineShort || data.timeline) : data.timeline}
+        pricingNoteText={data.pricingNote ?? ""}
+        listOnPage1={!!layout.customTemplate || data.listsOnPage2 === false}
       />
     </div>
   );

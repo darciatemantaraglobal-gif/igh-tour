@@ -114,8 +114,12 @@ export interface IghLayoutConfig {
     topPx: number;
     /** Font size harga (pax akan +4) */
     size: number;
-    /** Vertical center offset (pdf-units). Negatif = naik, positif = turun. */
+    /** Vertical center offset (pt). 0 = pas di tengah kotak. Positif = naik,
+     *  negatif = turun. */
     yOffsetPdf: number;
+    /** Marker: config sudah pakai rumus center baru (yOffset 0 = tengah).
+     *  Config lama tanpa marker yg masih -8 (default lama) dimigrasi ke 0. */
+    centerV2?: boolean;
     /** Override teks */
     paxText?: string;
     priceText?: string;
@@ -285,7 +289,7 @@ export const DEFAULT_IGH_LAYOUT: IghLayoutConfig = {
   projectName: { xPx: 55, topPx: 257, size: 18, lineGapPx: 2 },
   metaInfo: { customerXPx: 335, dateXPx: 538, topPx: 259, size: 11 },
   hotel: { makkahXPx: 51, madinahXPx: 407, topPx: 395, size: 16, subtitleOffsetPx: 32 },
-  pricing: { paxXPx: 47, priceXPx: 272, topPx: 518, size: 22, yOffsetPdf: -8 },
+  pricing: { paxXPx: 47, priceXPx: 272, topPx: 518, size: 22, yOffsetPdf: 0, centerV2: true },
   groupPricing: {
     topPx: 510,
     rowSpacingPx: 28,
@@ -307,8 +311,8 @@ export const DEFAULT_IGH_LAYOUT: IghLayoutConfig = {
     rowSpacingPx: 28,
     yOffsetPx: 0,
     size: 9,
-    sudahTermasukAlign: "center",
-    belumTermasukAlign: "center",
+    sudahTermasukAlign: "left",
+    belumTermasukAlign: "left",
     listBullet: "•",
   },
   fonts: { family: "Poppins", overrides: {} },
@@ -362,9 +366,9 @@ export const GROUP_LAYOUT: IghLayoutConfig = {
   projectName: { xPx: 55, topPx: 90, size: 20, lineGapPx: 2 },
   // Group template: Date di kiri, Invoice to di kanan (kebalik dari Private)
   metaInfo: { customerXPx: 365, dateXPx: 55, topPx: 273, size: 11 },
-  hotel: { makkahXPx: 55, madinahXPx: 384, topPx: 343, size: 16, subtitleOffsetPx: 32 },
+  hotel: { makkahXPx: 55, madinahXPx: 384, topPx: 338, size: 16, subtitleOffsetPx: 30 },
   // Pricing private boxes tidak dipakai di group mode — biarin default.
-  pricing: { paxXPx: 47, priceXPx: 272, topPx: 518, size: 22, yOffsetPdf: -8 },
+  pricing: { paxXPx: 47, priceXPx: 272, topPx: 518, size: 22, yOffsetPdf: 0, centerV2: true },
   groupPricing: {
     topPx: 440,
     rowSpacingPx: 28,
@@ -387,8 +391,8 @@ export const GROUP_LAYOUT: IghLayoutConfig = {
     rowSpacingPx: 26,
     yOffsetPx: 0,
     size: 9,
-    sudahTermasukAlign: "center",
-    belumTermasukAlign: "center",
+    sudahTermasukAlign: "left",
+    belumTermasukAlign: "left",
     listBullet: "•",
   },
   fonts: { family: "Poppins", overrides: {} },
@@ -403,7 +407,7 @@ export const GROUP_LAYOUT: IghLayoutConfig = {
   subtitleFontSize: 9,
   dateDisplayMode: "Short",
   priceDisplayMode: "compact",
-  pricingNote: { xPx: 53, topPx: 632, size: 7.5, align: "left", maxWidthPx: 646 },
+  pricingNote: { xPx: 53, topPx: 674, size: 7.5, align: "left", maxWidthPx: 646 },
 };
 
 /** Built-in starter buat template Grup, dikalibrasi 1:1 ke kicau.jpg.
@@ -469,7 +473,7 @@ const MODE_STORAGE_KEYS: Record<IghLayoutMode, string> = {
   group: "igh:pdf-layout-config-group",
 };
 
-const MODE_DEFAULTS: Record<IghLayoutMode, IghLayoutConfig> = {
+export const MODE_DEFAULTS: Record<IghLayoutMode, IghLayoutConfig> = {
   private: DEFAULT_IGH_LAYOUT,
   group: GROUP_LAYOUT,
 };
@@ -505,7 +509,9 @@ export function mergeConfig(
     projectName: { ...base.projectName, ...(override.projectName ?? {}) },
     metaInfo: { ...base.metaInfo, ...(override.metaInfo ?? {}) },
     hotel: { ...base.hotel, ...(override.hotel ?? {}) },
-    pricing: { ...base.pricing, ...(override.pricing ?? {}) },
+    // yOffsetPdf -8 = default lama (kompensasi rumus center yg salah). Sekarang
+    // angka sudah benar-benar di tengah kotak → nilai legacy itu dianggap 0.
+    pricing: migratePricing({ ...base.pricing, ...(override.pricing ?? {}) }, override.pricing),
     groupPricing: { ...base.groupPricing, ...(override.groupPricing ?? {}) },
     checklist: { ...base.checklist, ...(override.checklist ?? {}) },
     footer: { ...base.footer, ...(override.footer ?? {}) },
@@ -574,5 +580,92 @@ export function mergeConfig(
     pricingNote: override.pricingNote
       ? { ...(base.pricingNote ?? { xPx: 53, topPx: 632, size: 7.5, align: "left", maxWidthPx: 646 }), ...override.pricingNote }
       : base.pricingNote ?? { xPx: 53, topPx: 632, size: 7.5, align: "left", maxWidthPx: 646 },
+  };
+}
+
+function migratePricing(
+  p: IghLayoutConfig["pricing"],
+  raw?: Partial<IghLayoutConfig["pricing"]>,
+): IghLayoutConfig["pricing"] {
+  // Cuma config lama (tanpa marker centerV2) yg masih nilai default lama -8.
+  // Nilai -8 yg di-set user setelah update tetap dihormati.
+  const legacy = !!raw && !raw.centerV2 && raw.yOffsetPdf === -8;
+  return { ...p, yOffsetPdf: legacy ? 0 : p.yOffsetPdf, centerV2: true };
+}
+
+// ── Geometri template bawaan (diukur dari PDF template) ─────────────────────
+// Dipakai generator & overlay Edit Mode supaya posisi yg terlihat di Tuner
+// sama persis dgn hasil PDF.
+
+/** pt per template-px (PAGE_W 413.9506pt / 740px). */
+export const TPL_SCALE = 413.9506 / 740;
+const TPL_PAGE_W_PT = 413.9506;
+
+/** Ukuran kotak oranye Pax & Harga (template-px). Posisi kiri/atas tetap
+ *  dari Tuner (`pricing.paxXPx/priceXPx/topPx`). */
+export const PRICE_BOX_PX = { paxW: 115.5, priceW: 407.8, h: 63.5 };
+
+/** Posisi default WA. Selama posisi masih default (belum digeser user),
+ *  template bawaan otomatis naruh WA di tengah halaman, segaris dgn
+ *  instagram/email. */
+export const WA_DEFAULT_POS = { xPx: 290, yPx: 891 };
+/** Baseline teks instagram/email di footer template (pt, top-down) per mode. */
+export const FOOTER_TEXT_BASELINE_PT: Record<IghLayoutMode, number> = { private: 503.66, group: 518.78 };
+
+/** Posisi WA efektif (template-px, format sama dgn `whatsappPosition`).
+ *  `numberWidthPt` = lebar teks nomor WA pada `footer.size`. */
+export function resolveWhatsappPosition(
+  layout: IghLayoutConfig,
+  numberWidthPt: number,
+  mode: IghLayoutMode = "private",
+): { xPx: number; yPx: number; auto: boolean } {
+  const xPx = layout.whatsappPosition?.xPx ?? layout.footer.waXPx;
+  const yPx = layout.whatsappPosition?.yPx ?? layout.footer.topPx;
+  const isDefault = xPx === WA_DEFAULT_POS.xPx && yPx === WA_DEFAULT_POS.yPx;
+  if (layout.customTemplate || !isDefault) return { xPx, yPx, auto: false };
+  const iconPt = layout.footer.waIconSizePt;
+  const blockW = iconPt + 4 + numberWidthPt;
+  // Generator: baseline teks = topPx*S - 0.4r + 0.32*size (lihat drawWhatsappFooter).
+  const r = iconPt / 2;
+  return {
+    xPx: (TPL_PAGE_W_PT / 2 - blockW / 2) / TPL_SCALE,
+    yPx: (FOOTER_TEXT_BASELINE_PT[mode] + 0.4 * r - 0.32 * layout.footer.size) / TPL_SCALE,
+    auto: true,
+  };
+}
+
+/** Baris bernomor 01–05 template bawaan (pt, top-down). `centersPt` = tengah
+ *  vertikal tiap nomor; `left`/`right` = x awal teks (sesudah nomor) & batas
+ *  kanan garis tiap kolom. */
+export type IghListRows = {
+  centersPt: number[];
+  left: { x: number; maxX: number };
+  right: { x: number; maxX: number };
+};
+export const PRIVATE_LIST_ROWS: IghListRows = {
+  centersPt: [404.4, 419.8, 435.9, 450.6, 465.3],
+  left: { x: 50, maxX: 183 },
+  right: { x: 254, maxX: 386.5 },
+};
+export const GROUP_LIST_ROWS: IghListRows = {
+  centersPt: [420.0, 432.7, 445.85, 457.9, 470.0],
+  left: { x: 46, maxX: 193.5 },
+  right: { x: 240, maxX: 387.5 },
+};
+
+/** Baris list template bawaan setelah digeser setting Tuner (X kolom, Y baris
+ *  pertama, Y offset, Row Gap) relatif ke default mode-nya. */
+export function resolveListRows(layout: IghLayoutConfig, isGroup: boolean): IghListRows {
+  const rows = isGroup ? GROUP_LIST_ROWS : PRIVATE_LIST_ROWS;
+  const base = (isGroup ? GROUP_LAYOUT : DEFAULT_IGH_LAYOUT).checklist;
+  const c = layout.checklist;
+  const dy = (c.firstBaselinePx + c.yOffsetPx - base.firstBaselinePx - base.yOffsetPx) * TPL_SCALE;
+  const dStep = (c.rowSpacingPx - base.rowSpacingPx) * TPL_SCALE;
+  const dxL = (c.leftXPx - base.leftXPx) * TPL_SCALE;
+  const dxR = (c.rightXPx - base.rightXPx) * TPL_SCALE;
+  return {
+    centersPt: rows.centersPt.map((y, i) => y + dy + i * dStep),
+    left: { x: rows.left.x + dxL, maxX: rows.left.maxX + dxL },
+    right: { x: rows.right.x + dxR, maxX: rows.right.maxX + dxR },
   };
 }
