@@ -493,9 +493,9 @@ export function QuotationMetaSection({ value, onChange }: Props) {
             className="mt-0.5 h-3.5 w-3.5 accent-orange-500"
           />
           <span style={M} className="text-[11px] font-semibold text-slate-700 leading-snug">
-            Pindahkan "Sudah / Belum Termasuk" ke halaman 2
+            Layout ringkas + halaman Syarat & Ketentuan
             <span className="block text-[10px] font-normal text-slate-500">
-              Halaman 1 jadi lebih lega (harga + catatan), halaman 2 memuat daftar lengkap. Matikan untuk layout lama (daftar di halaman 1).
+              Halaman 1: "Sudah / Belum Termasuk" ditulis mendatar di bawah harga. Halaman 2: Syarat & Ketentuan. Matikan untuk layout lama (kotak daftar 01–05).
             </span>
           </span>
         </label>
@@ -508,16 +508,16 @@ export function QuotationMetaSection({ value, onChange }: Props) {
               kind="topNotes"
               items={value.topNotes}
               onChange={(next) => set("topNotes", next)}
-              hint="Muncul di bawah “harga sewaktu-waktu dapat berubah”. Muat sekitar 8 baris."
+              hint="Muncul di bawah daftar Sudah / Belum Termasuk. Kalau gak muat, otomatis pindah ke awal Syarat & Ketentuan."
               placeholder="cth: Harga belum termasuk PPN"
             />
             <ListEditor
-              title="Poin Tambahan — Halaman 2"
+              title="Syarat & Ketentuan — Halaman 2"
               color="blue"
               kind="bottomNotes"
               items={value.bottomNotes}
               onChange={(next) => set("bottomNotes", next)}
-              hint="Muncul di bawah daftar Sudah / Belum Termasuk."
+              hint="Isi halaman 2. Kosong = PDF cuma 1 halaman."
               placeholder="cth: Pembayaran DP 50% saat booking"
             />
           </div>
