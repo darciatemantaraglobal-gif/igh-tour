@@ -674,8 +674,9 @@ export async function buildIghPdf(data: IghPdfData, layout?: Partial<IghLayoutCo
   const hotelBold = fontFor("hotel", "bold");
   const hotelReg = fontFor("hotel", "regular");
   // Subtitle "X Malam" scaling proportional ke hotel.size dengan rasio 0.45,
-  // clamp 7..14 agar tetap readable dan tidak overlap dengan elemen di bawahnya.
-  const subtitleSize = Math.max(8, Math.min(14, cfg.hotel.size * 0.45));
+  // clamp 10..14 — minimal 10pt supaya sejajar ukuran keterangan lain
+  // (tanggal trip, invoice, Syarat & Ketentuan).
+  const subtitleSize = Math.max(10, Math.min(14, cfg.hotel.size * 0.45));
   // Lebar kolom dihitung dari posisi config supaya auto-shrink tidak cap font
   // size di nilai rendah untuk nama hotel yang panjang (bug: slider font size
   // seolah tidak berpengaruh ke Hotel Madinah kalau namanya panjang).
@@ -897,8 +898,10 @@ export async function buildIghPdf(data: IghPdfData, layout?: Partial<IghLayoutCo
       ? noteBottomPt + 6
       : isGroup ? 392 : STATIC_DISCLAIMER_PT.bottom + 6;
     const PAGE1_BOTTOM_PT = 478;
+    // S&K di halaman 2 ikut ukuran daftar Sudah/Belum Termasuk yg kepakai.
+    let listSize = INLINE_LIST_SIZE;
     if (includedItems.length > 0 || excludedItems.length > 0) {
-      cursorPt = drawInlineLists(page, [
+      const lists = drawInlineLists(page, [
         { title: "Sudah Termasuk", color: ORANGE, items: includedItems },
         { title: "Belum Termasuk", color: INLINE_EXCLUDED, items: excludedItems },
       ], {
@@ -908,7 +911,9 @@ export async function buildIghPdf(data: IghPdfData, layout?: Partial<IghLayoutCo
         maxW: PAGE_W - 58,
         font: fontFor("checklist", "regular"),
         bold: fontFor("checklist", "bold"),
-      }) + 8;
+      });
+      cursorPt = lists.bottomPt + 8;
+      listSize = lists.size;
     }
     // Poin tambahan yg gak muat di halaman 1 pindah ke awal Syarat & Ketentuan
     // (bukan hilang).
@@ -930,6 +935,7 @@ export async function buildIghPdf(data: IghPdfData, layout?: Partial<IghLayoutCo
         notes: termsItems,
         notesTitle: "Syarat & Ketentuan",
         numberedNotes: true,
+        notesSize: listSize,
         headerLines: [projectName.replace(/\s*\n\s*/g, " "), pick(cfg.metaInfo.customerText, data.customerName || "")],
         projectName,
         timeline: data.timelineShort || data.timeline || "",
@@ -1017,6 +1023,8 @@ const DETAIL_PAGE_THRESHOLD = 5;
 const DETAIL_GREEN: RGB = rgb(153 / 255, 204 / 255, 51 / 255);
 const DETAIL_RED: RGB = rgb(236 / 255, 78 / 255, 78 / 255);
 const DETAIL_RULE: RGB = rgb(0.82, 0.83, 0.88);
+/** Ukuran awal daftar Sudah/Belum Termasuk layout ringkas (bisa mengecil biar muat). */
+const INLINE_LIST_SIZE = 8.5;
 /** Pill "Belum Termasuk" di layout ringkas — abu slate netral, pasangan oranye brand. */
 const INLINE_EXCLUDED: RGB = rgb(0x5B / 255, 0x64 / 255, 0x70 / 255);
 
@@ -1078,77 +1086,53 @@ function drawBulletBlock(
   return drawn;
 }
 
-/** Satu baris daftar mendatar: teks gelap, separator "•" diwarnai. */
-function drawLineColoredBullets(page: PDFPage, line: string, o: { x: number; y: number; size: number; font: PDFFont; bulletColor: RGB }) {
-  const parts = line.split("•");
-  let x = o.x;
-  parts.forEach((part, i) => {
-    if (part) {
-      page.drawText(part, { x, y: o.y, size: o.size, font: o.font, color: DARK });
-      x += o.font.widthOfTextAtSize(part, o.size);
-    }
-    if (i < parts.length - 1) {
-      page.drawText("•", { x, y: o.y, size: o.size, font: o.font, color: o.bulletColor });
-      x += o.font.widthOfTextAtSize("•", o.size);
-    }
-  });
-}
-
-/** Wrap greedy per token (token gak pernah dipecah). Dipakai daftar mendatar
- *  supaya separator "•" selalu nempel di kata sebelumnya, gak jadi awal baris. */
-function wrapTokens(tokens: string[], font: PDFFont, size: number, maxWidth: number): string[] {
-  const lines: string[] = [];
-  let line = "";
-  for (const t of tokens) {
-    const trial = line ? `${line} ${t}` : t;
-    if (!line || font.widthOfTextAtSize(trial, size) <= maxWidth) line = trial;
-    else {
-      lines.push(line);
-      line = t;
-    }
-  }
-  if (line) lines.push(line);
-  return lines;
-}
-
 /** Daftar Sudah/Belum Termasuk versi ringkas: pill judul di kiri, poin-poin
- *  mendatar dipisah "•" di kanannya (wrap dgn hanging indent). Font dikecilkan
- *  sampai muat di `bottomPt`; kalau tetap gak muat, sisa dipotong "…".
- *  Return posisi bawah blok (pt, top-down). */
+ *  mendatar di grid kolom di kanannya (isi kiri→kanan, lalu baris berikutnya).
+ *  Jumlah kolom (3 atau 2) dipilih supaya tiap poin muat 1 baris; poin yg
+ *  tetap kepanjangan di-wrap di dalam sel-nya sendiri, gak nyambung ke poin
+ *  lain. Kolom sama utk semua section supaya sejajar. Font dikecilkan sampai
+ *  muat di `bottomPt`; baris yg tetap gak muat diganti "+N poin lainnya".
+ *  Return posisi bawah blok (pt, top-down) + ukuran font yg akhirnya dipakai. */
 function drawInlineLists(
   page: PDFPage,
   sections: { title: string; color: RGB; items: string[] }[],
   o: { x: number; topPt: number; bottomPt: number; maxW: number; font: PDFFont; bold: PDFFont },
-): number {
+): { bottomPt: number; size: number } {
   const secs = sections
     .map((s) => ({ ...s, items: s.items.map((x) => x.trim()).filter(Boolean) }))
     .filter((s) => s.items.length > 0);
-  if (secs.length === 0) return o.topPt;
-  const SEC_GAP = 5;
-  const PILL_TEXT_GAP = 6;
-  const toTokens = (items: string[]) =>
-    items.flatMap((item, i) => {
-      const words = item.split(/\s+/);
-      if (i < items.length - 1) words[words.length - 1] += " •";
-      return words;
-    });
+  if (secs.length === 0) return { bottomPt: o.topPt, size: INLINE_LIST_SIZE };
+  const SEC_GAP = 7;
+  const ROW_GAP = 2.5;
+  const COL_GAP = 10;
+  const PILL_GRID_GAP = 10;
+  const allItems = secs.flatMap((s) => s.items);
 
   const measure = (size: number) => {
-    const pillW = Math.max(...secs.map((s) => o.bold.widthOfTextAtSize(s.title, size))) + 10;
+    const pillW = Math.max(...secs.map((s) => o.bold.widthOfTextAtSize(s.title, size))) + 12;
     const pillH = size + 5;
-    const lineH = size * 1.35;
-    const textW = o.maxW - pillW - PILL_TEXT_GAP;
+    const lineH = size * 1.3;
+    const bulletW = o.font.widthOfTextAtSize("•  ", size);
+    const gridW = o.maxW - pillW - PILL_GRID_GAP;
+    const cellW = (cols: number) => (gridW - COL_GAP * (cols - 1)) / cols;
+    const cols = [3, 2].find((c) => allItems.every((t) => bulletW + o.font.widthOfTextAtSize(t, size) <= cellW(c))) ?? 2;
+    const cw = cellW(cols);
     const laid = secs.map((s) => {
-      const lines = wrapTokens(toTokens(s.items), o.font, size, textW);
-      const h = Math.max(pillH, (pillH - lineH) / 2 + lines.length * lineH);
-      return { ...s, lines, h };
+      const rows: { cells: string[][]; h: number }[] = [];
+      for (let i = 0; i < s.items.length; i += cols) {
+        const cells = s.items.slice(i, i + cols).map((t) => wrapAtSize(t, o.font, size, cw - bulletW));
+        rows.push({ cells, h: Math.max(...cells.map((l) => l.length)) * lineH });
+      }
+      const h = Math.max(pillH, (pillH - lineH) / 2 + rows.reduce((sum, r) => sum + r.h, 0) + ROW_GAP * (rows.length - 1));
+      return { ...s, rows, h };
     });
     const total = laid.reduce((sum, s) => sum + s.h, 0) + SEC_GAP * (laid.length - 1);
-    return { size, pillW, pillH, lineH, textW, laid, total };
+    return { size, pillW, pillH, lineH, bulletW, cols, cw, gridX: o.x + pillW + PILL_GRID_GAP, laid, total };
   };
-  let m = measure(8.5);
+  let m = measure(INLINE_LIST_SIZE);
   while (m.size > 6.5 && o.topPt + m.total > o.bottomPt) m = measure(m.size - 0.25);
 
+  const baseline = (lineTop: number) => PAGE_H - (lineTop + m.lineH / 2 + m.size * 0.35);
   let top = o.topPt;
   for (const s of m.laid) {
     if (top + m.pillH > o.bottomPt) break;
@@ -1158,22 +1142,32 @@ function drawInlineLists(
       x: o.x + (m.pillW - tw) / 2, y: PAGE_H - (top + m.pillH / 2 + m.size * 0.35),
       size: m.size, font: o.bold, color: WHITE,
     });
-    const firstLineTop = top + (m.pillH - m.lineH) / 2;
-    const room = Math.max(1, Math.floor((o.bottomPt - firstLineTop) / m.lineH));
-    let lines = s.lines;
-    if (lines.length > room) {
-      lines = lines.slice(0, room);
-      lines[room - 1] = truncateToWidth(`${lines[room - 1]} ${s.lines.slice(room).join(" ")}`, o.font, m.size, m.textW);
+
+    let rowTop = top + (m.pillH - m.lineH) / 2;
+    let shownItems = 0;
+    for (let ri = 0; ri < s.rows.length; ri++) {
+      const row = s.rows[ri];
+      const isLastFitting = ri < s.rows.length - 1 && rowTop + row.h + ROW_GAP + s.rows[ri + 1].h > o.bottomPt;
+      if (rowTop + row.h > o.bottomPt) break;
+      row.cells.forEach((lines, ci) => {
+        const x = m.gridX + ci * (m.cw + COL_GAP);
+        // Baris terakhir yg muat: sel paling kanan jadi penanda sisa poin.
+        const hidden = s.items.length - (shownItems + row.cells.length) + 1;
+        const asMore = isLastFitting && ci === row.cells.length - 1 && hidden > 1;
+        const cellLines = asMore ? [`+${hidden} poin lainnya`] : lines;
+        cellLines.forEach((ln, li) => {
+          const y = baseline(rowTop + li * m.lineH);
+          if (li === 0) page.drawText("•", { x, y, size: m.size, font: o.font, color: s.color });
+          page.drawText(ln, { x: x + m.bulletW, y, size: m.size, font: o.font, color: asMore ? GREY_MUTED : DARK });
+        });
+      });
+      shownItems += row.cells.length;
+      rowTop += row.h + ROW_GAP;
+      if (isLastFitting) break;
     }
-    const textX = o.x + m.pillW + PILL_TEXT_GAP;
-    lines.forEach((ln, i) => {
-      const y = PAGE_H - (firstLineTop + i * m.lineH + m.lineH / 2 + m.size * 0.35);
-      drawLineColoredBullets(page, ln, { x: textX, y, size: m.size, font: o.font, bulletColor: s.color });
-    });
-    top += Math.max(m.pillH, (m.pillH - m.lineH) / 2 + lines.length * m.lineH) + SEC_GAP;
-    if (lines.length < s.lines.length) break;
+    top = Math.max(top + m.pillH, rowTop - ROW_GAP) + SEC_GAP;
   }
-  return top - SEC_GAP;
+  return { bottomPt: top - SEC_GAP, size: m.size };
 }
 
 async function appendDetailPages(
@@ -1187,6 +1181,8 @@ async function appendDetailPages(
     notesTitle?: string;
     /** Poin tambahan bernomor (1, 2, 3…) — nomor lanjut antar halaman. */
     numberedNotes?: boolean;
+    /** Ukuran font poin tambahan (pt). Default sama dgn daftar (10). */
+    notesSize?: number;
     /** Keterangan penawaran di pojok kanan atas (template "Detail"), mis.
      *  [nama project, nama customer] — biar halaman ini tetap jelas kalau kepisah. */
     headerLines?: string[];
@@ -1249,9 +1245,10 @@ async function appendDetailPages(
   const NOTES_HEAD_H = 22;
   const NOTES_TOP = LIST_TOP - 24;
   const notesMaxW = PAGE_W - MARGIN * 2 - 4;
+  const NOTE_SIZE = o.notesSize ?? SIZE;
   const notesNumbering = o.numberedNotes ? { lastNumber: notes.length } : undefined;
-  const notesMarkerW = listMarkerWidth(o.regular, SIZE, notesNumbering);
-  const notesHeights = notes.map((t) => wrapAtSize(t, o.regular, SIZE, notesMaxW - notesMarkerW).length * LINE_H + ITEM_GAP);
+  const notesMarkerW = listMarkerWidth(o.regular, NOTE_SIZE, notesNumbering);
+  const notesHeights = notes.map((t) => wrapAtSize(t, o.regular, NOTE_SIZE, notesMaxW - notesMarkerW).length * NOTE_SIZE * 1.3 + ITEM_GAP);
   const notesH = notesHeights.reduce((sum, h) => sum + h, 0) + NOTES_HEAD_H;
   const notesFitOnLastListPage = listPages > 0 && usedOnLastListPage + 14 + notesH <= LIST_BOTTOM;
   // Catatan yg gak muat di halaman list → halaman sendiri, bisa lebih dari 1.
@@ -1362,7 +1359,7 @@ async function appendDetailPages(
         topPt: headTop + NOTES_HEAD_H,
         bottomPt: LIST_BOTTOM,
         maxW: notesMaxW,
-        size: SIZE,
+        size: NOTE_SIZE,
         font: o.regular,
         numbered: notesNumbering && { startNumber: notesIdx[0] + 1, lastNumber: notesNumbering.lastNumber },
       });

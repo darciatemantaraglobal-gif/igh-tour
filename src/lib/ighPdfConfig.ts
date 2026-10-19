@@ -287,7 +287,7 @@ export interface IghLayoutConfig {
 
 export const DEFAULT_IGH_LAYOUT: IghLayoutConfig = {
   projectName: { xPx: 55, topPx: 257, size: 18, lineGapPx: 2 },
-  metaInfo: { customerXPx: 335, dateXPx: 538, topPx: 259, size: 11 },
+  metaInfo: { customerXPx: 335, dateXPx: 538, topPx: 259, size: 10 },
   hotel: { makkahXPx: 51, madinahXPx: 407, topPx: 395, size: 16, subtitleOffsetPx: 32 },
   pricing: { paxXPx: 47, priceXPx: 272, topPx: 518, size: 22, yOffsetPdf: 0, centerV2: true },
   groupPricing: {
@@ -325,7 +325,7 @@ export const DEFAULT_IGH_LAYOUT: IghLayoutConfig = {
   mainHeaderGap: 8,
   headerSubtitleOffset: { xPx: 0, yPx: 0 },
   subtitleWidthPx: 285,
-  subtitleFontSize: 9,
+  subtitleFontSize: 10,
   dateDisplayMode: "Short",
   priceDisplayMode: "compact",
   pricingNote: { xPx: 53, topPx: 632, size: 7.5, align: "left", maxWidthPx: 646 },
@@ -365,7 +365,7 @@ export const BUILTIN_PRESET: IghLayoutPreset = {
 export const GROUP_LAYOUT: IghLayoutConfig = {
   projectName: { xPx: 55, topPx: 90, size: 20, lineGapPx: 2 },
   // Group template: Date di kiri, Invoice to di kanan (kebalik dari Private)
-  metaInfo: { customerXPx: 365, dateXPx: 55, topPx: 273, size: 11 },
+  metaInfo: { customerXPx: 365, dateXPx: 55, topPx: 273, size: 10 },
   hotel: { makkahXPx: 55, madinahXPx: 384, topPx: 338, size: 16, subtitleOffsetPx: 30 },
   // Pricing private boxes tidak dipakai di group mode — biarin default.
   pricing: { paxXPx: 47, priceXPx: 272, topPx: 518, size: 22, yOffsetPdf: 0, centerV2: true },
@@ -404,7 +404,7 @@ export const GROUP_LAYOUT: IghLayoutConfig = {
   mainHeaderGap: 8,
   headerSubtitleOffset: { xPx: 0, yPx: 0 },
   subtitleWidthPx: 285,
-  subtitleFontSize: 9,
+  subtitleFontSize: 10,
   dateDisplayMode: "Short",
   priceDisplayMode: "compact",
   pricingNote: { xPx: 53, topPx: 674, size: 7.5, align: "left", maxWidthPx: 646 },
