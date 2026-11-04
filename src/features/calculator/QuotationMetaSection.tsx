@@ -17,7 +17,7 @@ export interface QuotationMeta {
   excludedItems: string[];
   /** Poin tambahan (bisa diedit) di halaman 1 PDF, di bawah "harga sewaktu-waktu dapat berubah". */
   topNotes: string[];
-  /** Poin tambahan (bisa diedit) di halaman 2 PDF, di bawah daftar Sudah/Belum Termasuk. */
+  /** Syarat & Ketentuan halaman 2 PDF: plain text, 1 elemen = 1 baris (kosong = jarak paragraf). */
   bottomNotes: string[];
   /** true = daftar Sudah/Belum Termasuk dipindah ke halaman 2 (layout 2 halaman). */
   listsOnPage2: boolean;
@@ -63,7 +63,7 @@ function saveTemplates(kind: ListKind, list: ListTemplate[]) {
 }
 
 function ListEditor({
-  title, color, kind, items, onChange, hint, placeholder = "cth: Visa Umroh",
+  title, color, kind, items, onChange, hint, placeholder = "cth: Visa Umroh", plainText = false,
 }: {
   title: string;
   color: "green" | "red" | "blue";
@@ -72,6 +72,8 @@ function ListEditor({
   onChange: (next: string[]) => void;
   hint?: string;
   placeholder?: string;
+  /** true = satu textarea bebas (tiap baris 1 elemen `items`), bukan daftar poin. */
+  plainText?: boolean;
 }) {
   const palette = color === "green"
     ? { bg: "bg-emerald-50", border: "border-emerald-200", chip: "bg-emerald-100 text-emerald-700", btn: "border-emerald-300 text-emerald-700 hover:bg-emerald-100" }
@@ -95,9 +97,11 @@ function ListEditor({
   }, [menuOpen]);
 
   function handleSave() {
-    const cleaned = items.map((s) => s.trim()).filter(Boolean);
+    const cleaned = plainText
+      ? items.join("\n").trim().split("\n").filter((s, _, a) => a.length > 1 || s)
+      : items.map((s) => s.trim()).filter(Boolean);
     if (cleaned.length === 0) {
-      toast.error("Isi dulu minimal 1 item sebelum disimpan jadi template");
+      toast.error(plainText ? "Isi dulu teksnya sebelum disimpan jadi template" : "Isi dulu minimal 1 item sebelum disimpan jadi template");
       return;
     }
     const name = window.prompt("Nama template:", "")?.trim();
@@ -116,6 +120,13 @@ function ListEditor({
   }
 
   function handleAppend(tpl: ListTemplate) {
+    if (plainText) {
+      const current = items.join("\n").trimEnd();
+      onChange([...(current ? [...current.split("\n"), ""] : []), ...tpl.items]);
+      toast.success(`Teks dari "${tpl.name}" ditambahkan`);
+      setMenuOpen(false);
+      return;
+    }
     const existing = new Set(items.map((s) => s.trim().toLowerCase()).filter(Boolean));
     const additions = tpl.items.filter((s) => !existing.has(s.trim().toLowerCase()));
     if (additions.length === 0) {
@@ -157,7 +168,7 @@ function ListEditor({
                   onClick={() => { handleSave(); setMenuOpen(false); }}
                   className="w-full flex items-center gap-2 px-2 py-1.5 rounded-md text-[11px] font-semibold text-slate-700 hover:bg-slate-100"
                 >
-                  <Save className="h-3.5 w-3.5" /> Simpan list saat ini sebagai template…
+                  <Save className="h-3.5 w-3.5" /> Simpan {plainText ? "teks" : "list"} saat ini sebagai template…
                 </button>
                 <div className="my-1 h-px bg-slate-100" />
                 {templates.length === 0 ? (
@@ -196,16 +207,28 @@ function ListEditor({
               </div>
             )}
           </div>
-          <button
-            type="button"
-            onClick={() => onChange([...items, ""])}
-            className={`inline-flex items-center gap-1 h-6 px-2 rounded-md border ${palette.btn} text-[10.5px] font-bold bg-white`}
-          >
-            <Plus className="h-3 w-3" /> Tambah
-          </button>
+          {!plainText && (
+            <button
+              type="button"
+              onClick={() => onChange([...items, ""])}
+              className={`inline-flex items-center gap-1 h-6 px-2 rounded-md border ${palette.btn} text-[10.5px] font-bold bg-white`}
+            >
+              <Plus className="h-3 w-3" /> Tambah
+            </button>
+          )}
         </div>
       </div>
       {hint && <p className="text-[10px] text-slate-500 leading-snug">{hint}</p>}
+      {plainText ? (
+        <textarea
+          value={items.join("\n")}
+          onChange={(e) => onChange(e.target.value === "" ? [] : e.target.value.split("\n"))}
+          placeholder={placeholder}
+          rows={12}
+          style={M}
+          className="w-full rounded-md border border-slate-200 bg-white px-2 py-1.5 text-[12px] leading-relaxed resize-y focus:outline-none focus:ring-1 focus:ring-orange-400"
+        />
+      ) : (
       <div className="space-y-1.5">
         {items.length === 0 && (
           <p className="text-[10.5px] text-slate-400 italic">Belum ada item — klik "Tambah"</p>
@@ -237,6 +260,7 @@ function ListEditor({
           </div>
         ))}
       </div>
+      )}
     </div>
   );
 }
@@ -517,8 +541,9 @@ export function QuotationMetaSection({ value, onChange }: Props) {
               kind="bottomNotes"
               items={value.bottomNotes}
               onChange={(next) => set("bottomNotes", next)}
-              hint="Isi halaman 2. Kosong = PDF cuma 1 halaman."
-              placeholder="cth: Pembayaran DP 50% saat booking"
+              plainText
+              hint="Teks bebas tanpa poin. Enter = baris baru, baris kosong = jarak antar paragraf. Kosong = PDF cuma 1 halaman."
+              placeholder="cth: Pembayaran DP wajib dilakukan untuk mengunci ketersediaan kamar hotel."
             />
           </div>
         )}

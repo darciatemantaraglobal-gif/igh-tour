@@ -816,6 +816,8 @@ export default function PackageDetail() {
       staffs: calc.staffs,
       commissionFee: calc.commissionFee,
       marginPercent: calc.marginPercent,
+      marginMode: calc.marginMode,
+      marginFixed: calc.marginFixed,
       discount: calc.discount,
       rates: effectiveRates,
     });
@@ -1816,6 +1818,8 @@ export default function PackageDetail() {
                 staffs: calc.staffs,
                 commissionFee: calc.commissionFee,
                 marginPercent: calc.marginPercent,
+                marginMode: calc.marginMode,
+                marginFixed: calc.marginFixed,
                 discount: calc.discount,
               }}
               rates={effectiveRates}
@@ -1899,7 +1903,7 @@ export default function PackageDetail() {
                         {[
                           { label: "Total Budget (HPP)", value: quote.hpp, sub: `${formatCurrency(quote.hpp / safePax)}/pax`, color: "" },
                           { label: `+ Commission Fee Admin`, value: quote.commissionFee, sub: `${formatCurrency(quote.commissionFee / safePax)}/pax`, color: "text-amber-600" },
-                          { label: `+ Profit Margin (${calc.marginPercent}%)`, value: quote.marginIDR, sub: `${formatCurrency(quote.marginIDR / safePax)}/pax`, color: "text-emerald-600" },
+                          { label: calc.marginMode === "fixed" ? `+ Profit Margin (${formatCurrency(calc.marginFixed ?? 0)}/pax)` : `+ Profit Margin (${calc.marginPercent}%)`, value: quote.marginIDR, sub: `${formatCurrency(quote.marginIDR / safePax)}/pax`, color: "text-emerald-600" },
                         ].map((r) => (
                           <div key={r.label} className="flex items-center justify-between gap-2">
                             <div>

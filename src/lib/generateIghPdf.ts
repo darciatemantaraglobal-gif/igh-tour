@@ -886,7 +886,8 @@ export async function buildIghPdf(data: IghPdfData, layout?: Partial<IghLayoutCo
   const includedItems = splitOverrideOrUse(cfg.checklist.includedText, data.included);
   const excludedItems = splitOverrideOrUse(cfg.checklist.excludedText, data.excluded);
   const topNotes = (data.topNotes ?? []).map((x) => x.trim()).filter(Boolean);
-  const bottomNotes = (data.bottomNotes ?? []).map((x) => x.trim()).filter(Boolean);
+  // S&K halaman 2 = plain text per baris; baris kosong dipertahankan (jarak paragraf).
+  const bottomNotes = (data.bottomNotes ?? []).flatMap((x) => x.split(/\r?\n/)).map((x) => x.trim());
 
   if (twoPage) {
     // ── LAYOUT 2 HALAMAN ──
@@ -898,8 +899,6 @@ export async function buildIghPdf(data: IghPdfData, layout?: Partial<IghLayoutCo
       ? noteBottomPt + 6
       : isGroup ? 392 : STATIC_DISCLAIMER_PT.bottom + 6;
     const PAGE1_BOTTOM_PT = 478;
-    // S&K di halaman 2 ikut ukuran daftar Sudah/Belum Termasuk yg kepakai.
-    let listSize = INLINE_LIST_SIZE;
     if (includedItems.length > 0 || excludedItems.length > 0) {
       const lists = drawInlineLists(page, [
         { title: "Sudah Termasuk", color: ORANGE, items: includedItems },
@@ -913,7 +912,6 @@ export async function buildIghPdf(data: IghPdfData, layout?: Partial<IghLayoutCo
         bold: fontFor("checklist", "bold"),
       });
       cursorPt = lists.bottomPt + 8;
-      listSize = lists.size;
     }
     // Poin tambahan yg gak muat di halaman 1 pindah ke awal Syarat & Ketentuan
     // (bukan hilang).
@@ -927,15 +925,16 @@ export async function buildIghPdf(data: IghPdfData, layout?: Partial<IghLayoutCo
         font: fontFor("checklist", "regular"),
       })
       : 0;
-    const termsItems = [...topNotes.slice(topDrawn), ...bottomNotes];
-    if (termsItems.length > 0) {
+    const topOverflow = topNotes.slice(topDrawn);
+    const termsItems = [...topOverflow, ...(topOverflow.length > 0 ? [""] : []), ...bottomNotes];
+    if (termsItems.some(Boolean)) {
       await appendDetailPages(pdf, {
         included: [],
         excluded: [],
         notes: termsItems,
         notesTitle: "Syarat & Ketentuan",
-        numberedNotes: true,
-        notesSize: listSize,
+        plainNotes: true,
+        notesSize: PLAIN_TERMS_SIZE,
         headerLines: [projectName.replace(/\s*\n\s*/g, " "), pick(cfg.metaInfo.customerText, data.customerName || "")],
         projectName,
         timeline: data.timelineShort || data.timeline || "",
@@ -1025,6 +1024,8 @@ const DETAIL_RED: RGB = rgb(236 / 255, 78 / 255, 78 / 255);
 const DETAIL_RULE: RGB = rgb(0.82, 0.83, 0.88);
 /** Ukuran awal daftar Sudah/Belum Termasuk layout ringkas (bisa mengecil biar muat). */
 const INLINE_LIST_SIZE = 8.5;
+/** Ukuran teks Syarat & Ketentuan (plain text, rata kanan-kiri) di halaman 2. */
+const PLAIN_TERMS_SIZE = 7.5;
 /** Pill "Belum Termasuk" di layout ringkas — abu slate netral, pasangan oranye brand. */
 const INLINE_EXCLUDED: RGB = rgb(0x5B / 255, 0x64 / 255, 0x70 / 255);
 
@@ -1084,6 +1085,27 @@ function drawBulletBlock(
     drawn++;
   }
   return drawn;
+}
+
+/** Gambar 1 baris teks; kalau `justify`, spasi antar kata direnggangkan sampai
+ *  penuh selebar `maxW` (pdf-lib gak punya alignment justify bawaan). */
+function drawPlainLine(
+  page: PDFPage,
+  text: string,
+  o: { x: number; y: number; maxW: number; justify: boolean; size: number; font: PDFFont },
+) {
+  const words = text.split(" ");
+  const slack = o.maxW - o.font.widthOfTextAtSize(text, o.size);
+  if (!o.justify || words.length < 2 || slack <= 0) {
+    page.drawText(text, { x: o.x, y: o.y, size: o.size, font: o.font, color: DARK });
+    return;
+  }
+  const spaceW = o.font.widthOfTextAtSize(" ", o.size) + slack / (words.length - 1);
+  let x = o.x;
+  for (const w of words) {
+    page.drawText(w, { x, y: o.y, size: o.size, font: o.font, color: DARK });
+    x += o.font.widthOfTextAtSize(w, o.size) + spaceW;
+  }
 }
 
 /** Daftar Sudah/Belum Termasuk versi ringkas: pill judul di kiri, poin-poin
@@ -1181,6 +1203,9 @@ async function appendDetailPages(
     notesTitle?: string;
     /** Poin tambahan bernomor (1, 2, 3…) — nomor lanjut antar halaman. */
     numberedNotes?: boolean;
+    /** Poin tambahan sebagai plain text per baris: tanpa nomor/bullet, rata
+     *  kanan-kiri, baris kosong jadi jarak antar paragraf. */
+    plainNotes?: boolean;
     /** Ukuran font poin tambahan (pt). Default sama dgn daftar (10). */
     notesSize?: number;
     /** Keterangan penawaran di pojok kanan atas (template "Detail"), mis.
@@ -1236,19 +1261,32 @@ async function appendDetailPages(
   const listPages = cols.some((c) => c.items.length > 0)
     ? Math.max(...cols.map((c) => c.pages.length), 1)
     : 0;
-  const notes = clean(o.notes);
+  const plain = !!o.plainNotes;
+  const notes = plain ? o.notes.map((x) => x.trim()).join("\n").trim().split("\n").filter((x, i, a) => a.length > 1 || x) : clean(o.notes);
 
   // Tinggi akhir list di halaman terakhir → nentuin catatan muat di situ atau pindah halaman.
   const usedOnLastListPage = listPages === 0 ? LIST_TOP : LIST_TOP + Math.max(
     ...cols.map((c) => (c.pages[listPages - 1] ?? []).reduce((sum, i) => sum + c.heights[i], 0)),
   );
-  const NOTES_HEAD_H = 22;
+  const NOTES_HEAD_H = plain ? 28 : 22;
   const NOTES_TOP = LIST_TOP - 24;
   const notesMaxW = PAGE_W - MARGIN * 2 - 4;
   const NOTE_SIZE = o.notesSize ?? SIZE;
   const notesNumbering = o.numberedNotes ? { lastNumber: notes.length } : undefined;
   const notesMarkerW = listMarkerWidth(o.regular, NOTE_SIZE, notesNumbering);
-  const notesHeights = notes.map((t) => wrapAtSize(t, o.regular, NOTE_SIZE, notesMaxW - notesMarkerW).length * NOTE_SIZE * 1.3 + ITEM_GAP);
+  // Plain text: dipecah per baris hasil wrap, biar paragraf panjang bisa nyambung ke halaman berikutnya.
+  const plainW = PAGE_W - MARGIN * 2;
+  const plainLineH = NOTE_SIZE * 1.4;
+  const plainRows = plain
+    ? notes.flatMap((line) => {
+      if (!line) return [{ text: "", justify: false }];
+      const wrapped = wrapAtSize(line, o.regular, NOTE_SIZE, plainW);
+      return wrapped.map((text, i) => ({ text, justify: i < wrapped.length - 1 }));
+    })
+    : [];
+  const notesHeights = plain
+    ? plainRows.map((r) => (r.text ? plainLineH : NOTE_SIZE * 0.9))
+    : notes.map((t) => wrapAtSize(t, o.regular, NOTE_SIZE, notesMaxW - notesMarkerW).length * NOTE_SIZE * 1.3 + ITEM_GAP);
   const notesH = notesHeights.reduce((sum, h) => sum + h, 0) + NOTES_HEAD_H;
   const notesFitOnLastListPage = listPages > 0 && usedOnLastListPage + 14 + notesH <= LIST_BOTTOM;
   // Catatan yg gak muat di halaman list → halaman sendiri, bisa lebih dari 1.
@@ -1347,22 +1385,37 @@ async function appendDetailPages(
 
     // Poin tambahan: di bawah list (halaman list terakhir) atau halaman sendiri.
     const notesIdx = isListPage
-      ? (notes.length > 0 && pi === listPages - 1 && notesFitOnLastListPage ? notes.map((_, i) => i) : [])
+      ? (notes.length > 0 && pi === listPages - 1 && notesFitOnLastListPage ? notesHeights.map((_, i) => i) : [])
       : (notesPages[pi - listPages] ?? []);
-    const notesHere = notesIdx.map((i) => notes[i]);
-    if (notesHere.length > 0) {
+    if (notesIdx.length > 0) {
       const headTop = isListPage ? cursorAfterLists + 14 : NOTES_TOP;
       const title = o.notesTitle ?? "Catatan Tambahan";
-      page.drawText(pi > listPages ? `${title} (lanjutan)` : title, { x: MARGIN, y: yTop(headTop + 10), size: 11, font: o.bold, color: ORANGE });
-      drawBulletBlock(page, notesHere, {
-        x: MARGIN + 4,
-        topPt: headTop + NOTES_HEAD_H,
-        bottomPt: LIST_BOTTOM,
-        maxW: notesMaxW,
-        size: NOTE_SIZE,
-        font: o.regular,
-        numbered: notesNumbering && { startNumber: notesIdx[0] + 1, lastNumber: notesNumbering.lastNumber },
-      });
+      if (plain) {
+        page.drawText(title, { x: MARGIN, y: yTop(headTop + 14), size: 14, font: o.bold, color: ORANGE });
+        let top = headTop + NOTES_HEAD_H;
+        notesIdx.forEach((i, pos) => {
+          const row = plainRows[i];
+          // Baris kosong di awal halaman lanjutan gak perlu makan tempat.
+          if (!row.text && pos === 0) return;
+          if (row.text) {
+            drawPlainLine(page, row.text, {
+              x: MARGIN, y: yTop(top + NOTE_SIZE), maxW: plainW, justify: row.justify, size: NOTE_SIZE, font: o.regular,
+            });
+          }
+          top += notesHeights[i];
+        });
+      } else {
+        page.drawText(pi > listPages ? `${title} (lanjutan)` : title, { x: MARGIN, y: yTop(headTop + 10), size: 11, font: o.bold, color: ORANGE });
+        drawBulletBlock(page, notesIdx.map((i) => notes[i]), {
+          x: MARGIN + 4,
+          topPt: headTop + NOTES_HEAD_H,
+          bottomPt: LIST_BOTTOM,
+          maxW: notesMaxW,
+          size: NOTE_SIZE,
+          font: o.regular,
+          numbered: notesNumbering && { startNumber: notesIdx[0] + 1, lastNumber: notesNumbering.lastNumber },
+        });
+      }
     }
     endOriginAlign(page);
   }

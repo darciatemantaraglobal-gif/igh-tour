@@ -991,7 +991,8 @@ export default function Calculator() {
       pricingNote: calc.pricingNote || undefined,
       listsOnPage2: calc.listsOnPage2 !== false,
       topNotes: (calc.topNotes ?? []).map((x) => x.trim()).filter(Boolean),
-      bottomNotes: (calc.bottomNotes ?? []).map((x) => x.trim()).filter(Boolean),
+      // Plain text per baris — baris kosong = jarak paragraf, jangan difilter.
+      bottomNotes: calc.bottomNotes ?? [],
     };
   }, [calc, quote, effectiveRates.USD, effectiveRates.SAR, groupMatrix]);
 
