@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useLayoutEffect, useRef, useState } from "react";
 import * as DialogPrimitive from "@radix-ui/react-dialog";
 import { Dialog, DialogContent, DialogTitle } from "@/components/ui/dialog";
-import { Download, Hand, Loader2, MousePointer2, Redo2, Sliders, Undo2, X, Zap, ZapOff } from "lucide-react";
+import { AlertTriangle, Download, Hand, Loader2, MousePointer2, Redo2, Sliders, Undo2, X, Zap, ZapOff } from "lucide-react";
 import { toast } from "sonner";
 import { downloadIghPdf, renderIghPdfPages, type IghPdfData } from "@/lib/generateIghPdf";
 import { loadIghLayoutConfig, saveIghLayoutConfig, type IghLayoutConfig, type IghLayoutMode } from "@/lib/ighPdfConfig";
@@ -304,6 +304,27 @@ export function PdfPreviewDialog({ open, onOpenChange, data }: Props) {
 
   const previewBody = (
     <div ref={previewWrapperRef} className="flex-1 overflow-y-auto px-5 py-4 bg-slate-100 relative">
+      {/* Background custom punya area daftar sendiri → generator pakai layout lama
+          walau "Layout ringkas + halaman S&K" dicentang. Kasih tahu, jangan diam-diam. */}
+      {layout.customTemplate && data.listsOnPage2 !== false && (
+        <div className="mx-auto mb-3 max-w-[560px] flex items-start gap-2 rounded-lg border border-amber-300 bg-amber-50 px-3 py-2 text-[11px] text-amber-800">
+          <AlertTriangle className="h-3.5 w-3.5 mt-0.5 shrink-0" />
+          <div className="flex-1 leading-snug">
+            Background template custom (<span className="font-semibold">{layout.customTemplate.name}</span>) lagi aktif,
+            jadi PDF pakai layout lama dan halaman Syarat & Ketentuan gak ikut.
+          </div>
+          <button
+            type="button"
+            onClick={() => {
+              commitLayout({ ...layout, customTemplate: null });
+              toast.success("Pakai template IGH bawaan — layout ringkas aktif");
+            }}
+            className="shrink-0 h-6 px-2 rounded-md bg-amber-500 text-white text-[10px] font-bold hover:bg-amber-600"
+          >
+            Pakai template bawaan
+          </button>
+        </div>
+      )}
       {loading && (
         <div className="absolute top-2 right-2 z-30 inline-flex items-center gap-1 h-6 px-2 rounded-md bg-white/90 border border-slate-200 text-[10px] font-bold text-slate-600 shadow-sm">
           <Loader2 className="h-3 w-3 animate-spin" />
